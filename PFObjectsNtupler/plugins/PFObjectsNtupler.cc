@@ -12,6 +12,11 @@
 #include "DataFormats/ParticleFlowReco/interface/PFBlock.h"
 #include "DataFormats/HcalRecHit/interface/HBHERecHit.h"
 #include "DataFormats/HcalDetId/interface/HcalDetId.h"
+
+#include "DataFormats/EcalRecHit/interface/EcalRecHitCollections.h" // ECAL rechits
+#include "DataFormats/EcalRecHit/interface/EcalRecHit.h"
+#include "DataFormats/DetId/interface/DetId.h"
+
 #include "Geometry/CaloGeometry/interface/CaloGeometry.h"
 #include "Geometry/CaloGeometry/interface/CaloCellGeometry.h"
 #include "Geometry/Records/interface/CaloGeometryRecord.h"
@@ -36,10 +41,10 @@ private:
   edm::EDGetTokenT<std::vector<reco::PFCluster>> ecalClustersToken_;
   edm::EDGetTokenT<std::vector<reco::PFCluster>> hcalClustersToken_;
   edm::EDGetTokenT<edm::SortedCollection<HBHERecHit>> hbheRechitsToken_;
+  edm::EDGetTokenT<EcalRecHitCollection> ebRechitsToken_;
+  edm::EDGetTokenT<EcalRecHitCollection> eeRechitsToken_;
+  edm::EDGetTokenT<EcalRecHitCollection> esRechitsToken_;
   edm::EDGetTokenT<std::vector<reco::PFBlock>> pfBlocksToken_;
-
-  edm::ESGetToken<CaloGeometry, CaloGeometryRecord> geomToken_;
-  const CaloGeometry* geometry_ = nullptr;
 
   void beginRun(const edm::Run&, const edm::EventSetup&);
 
@@ -52,6 +57,8 @@ private:
 
   // ECAL clusters
   std::vector<float> ecal_energy_, ecal_eta_, ecal_phi_, ecal_time_;
+  // ECAL rechits
+  std::vector<float> eb_rechit_energy_; std::vector<float> eb_rechit_eta_; std::vector<float> eb_rechit_phi_; std::vector<float> eb_rechit_time_; std::vector<int> eb_rechit_clusterIndex_; 
 
   // HCAL clusters
   std::vector<float> hcal_energy_, hcal_eta_, hcal_phi_, hcal_time_, hcal_depth_;
@@ -69,11 +76,12 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
   ecalClustersToken_ = consumes<std::vector<reco::PFCluster>>(iConfig.getParameter<edm::InputTag>("ecalClusters"));
   hcalClustersToken_ = consumes<std::vector<reco::PFCluster>>(iConfig.getParameter<edm::InputTag>("hcalClusters"));
   hbheRechitsToken_ = consumes<edm::SortedCollection<HBHERecHit>>(edm::InputTag("hbhereco", "", "ReRECO")); // make sure this matches the input file! 
+  ebRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalRecHit", "EcalRecHitsEB", "ReRECO")); 
+  eeRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalRecHit", "EcalRecHitsEE", "ReRECO")); 
+  esRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalPreshowerRecHit", "EcalRecHitsES", "ReRECO")); 
   // hbheRechitsToken_ = consumes<std::vector<reco::PFRecHit>>(edm::InputTag("particleFlowRecHitHBHE", "Cleaned", "ReRECOtoAOD"));
   // hbheRechitsToken_ = consumes<std::vector<reco::PFRecHit>>(edm::InputTag("particleFlowRecHitHBHE", "", "ReRECO"));
   pfBlocksToken_ = consumes<std::vector<reco::PFBlock>>(iConfig.getParameter<edm::InputTag>("pfBlocks"));
-
-  geomToken_ = esConsumes<CaloGeometry, CaloGeometryRecord>();
 
   edm::Service<TFileService> fs;
   tree_ = fs->make<TTree>("pfTree", "PF objects");
@@ -110,37 +118,44 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
   tree_->Branch("num_pfBlocks", &num_pfBlocks_);
 }
 
-// do this to load the geometry (needed for hbhe rechits)
-void PFObjectsNtupler::beginRun(const edm::Run&, const edm::EventSetup& iSetup) {
-  geometry_ = &iSetup.getData(geomToken_);
-}
+// Convert ieta to eta using HCAL mapping
 
-// Approximate conversion from ieta/iphi to eta/phi
-std::pair<double,double> detidEtaPhiFallback(const HcalDetId& detid) {
-    double phi = 0.0;
+double hcalEtaFromIeta(int ieta) {
+    // HB: |ieta| <= 16, HE: 17 <= |ieta| <= 28
+    int sign = (ieta >= 0 ? 1 : -1);
+    int absi = std::abs(ieta);
+
     double eta = 0.0;
 
-    // iPhi runs from 1..72 (HB/HE)
-    int iphi = detid.iphi();
-    phi = (iphi - 0.5) * 2.0 * M_PI / 72.0;  // radians
-
-    // iEta runs from 1..16 for HB, 16..29 for HE (example)
-    int ieta = detid.ieta();
-    bool isNegative = ieta < 0;
-    int absIeta = std::abs(ieta);
-
-    // HB: 1..16, HE: 16..29 (simplified central value for eta)
-    if (absIeta <= 16) {
-        // HB approximate center of tower
-        eta = 0.087 * (absIeta - 0.5);
-    } else {
-        // HE approximate center of tower
-        eta = 0.087 * (16 - 0.5) + 0.09 * (absIeta - 16 + 0.5);  // rough spacing
+    if (absi <= 16) { // HB
+        eta = 0.087 * (absi - 0.5);
+    } else if (absi <= 28) { // HE
+        eta = 0.087 * (16 + (absi - 16) * 0.9); // approximate
+    } else { // HF etc; nothing should be outside really
+        eta = 40.0; //placeholder
     }
+    return sign * eta;
+}
 
-    if (isNegative) eta = -eta;
+// Convert iphi to phi (HB/HE have 72 phi bins)
+double hcalPhiFromIphi(int iphi) {
+    // HCAL iphi runs from 1..72
+    double phi = (iphi - 1) * (M_PI / 36.0); // 2pi/72
+    // Put phi into -pi, pi
+    if (phi > M_PI) phi -= 2.0 * M_PI;
 
-    return std::make_pair(eta, phi);
+    return phi;
+}
+
+// Master helper: return (eta, phi) for HBHE DetId
+inline std::pair<double,double> hcalEtaPhiFromDetId(const HcalDetId& detid) {
+    int ieta = detid.ieta();  // signed eta index
+    int iphi = detid.iphi();  // 1..72
+
+    double eta = hcalEtaFromIeta(ieta);
+    double phi = hcalPhiFromIphi(iphi);
+
+    return {eta, phi};
 }
 
 void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup&)
@@ -178,6 +193,14 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup&)
     }
   }
 
+  // ECAL RecHits 
+  edm::Handle<EcalRecHitCollection> ebRecHits;
+  edm::Handle<EcalRecHitCollection> eeRecHits;
+  edm::Handle<EcalRecHitCollection> esRecHits;
+  iEvent.getByToken(ebRechitsToken_, ebRecHits);
+  iEvent.getByToken(eeRechitsToken_, eeRecHits);
+  iEvent.getByToken(esRechitsToken_, esRecHits);
+
   // HCAL Clusters
   edm::Handle<std::vector<reco::PFCluster>> hcalClusters;
   iEvent.getByToken(hcalClustersToken_, hcalClusters);
@@ -204,45 +227,18 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup&)
           // std::cout << "Hit energy: " << rh.energy()
           //     << " detId: " << detid.rawId()
           //     << " depth: " << detid.depth() << std::endl;
-          double rh_eta = 0., rh_phi = 0.;
 
-          if (geometry_) {
-              const CaloSubdetectorGeometry* subDetGeom = geometry_->getSubdetectorGeometry(detid);
-              if (subDetGeom) {
-                  const CaloCellGeometry* cell = subDetGeom->getGeometry(detid);
-                  if (cell) {
-                      const GlobalPoint pos = cell->getPosition();
-                      rh_eta = pos.eta();
-                      rh_phi = pos.phi();
-                  } else {
-                      // fallback: compute eta/phi from detid
-                      auto etaPhi = detidEtaPhiFallback(detid);
-                      rh_eta = etaPhi.first;
-                      rh_phi = etaPhi.second;
-                  }
-              } else {
-                  auto etaPhi = detidEtaPhiFallback(detid);
-                  rh_eta = etaPhi.first;
-                  rh_phi = etaPhi.second;
-              }
-          } else {
-              auto etaPhi = detidEtaPhiFallback(detid);
-              rh_eta = etaPhi.first;
-              rh_phi = etaPhi.second;
-          }
+          auto [rh_eta, rh_phi] = hcalEtaPhiFromDetId(detid);
 
-          // Optional: pre-cut by eta window
           if (std::abs(rh_eta - cl.eta()) > 0.4) continue;
-
-          double dR = reco::deltaR(cl.eta(), cl.phi(), rh_eta, rh_phi);
-          if (dR > 0.2) continue;
+          if (reco::deltaR(cl.eta(), cl.phi(), rh_eta, rh_phi) > 0.2) continue;
 
           // Save the rechit info
           hbhe_rechit_energy_.push_back(rh.energy());
           hbhe_rechit_eta_.push_back(rh_eta);
           hbhe_rechit_phi_.push_back(rh_phi);
           hbhe_rechit_depth_.push_back(detid.depth());
-          hbhe_rechit_time_.push_back(rh.time());
+          hbhe_rechit_time_.push_back(rh.time()); // MAHI reconstructed time
           hbhe_rechit_clusterIndex_.push_back(hcal_energy_.size() - 1); // save cluster index association so it is possible to map backwards to the cluster this rechit was near
         }
       }

@@ -11,9 +11,9 @@ process.maxEvents = cms.untracked.PSet(
 
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(
-        'file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/pf_only_reReco.root'
-        # 'file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/pf_only_reRecoAOD.root'
-        # 'file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/pf_only_reRecoAODfull.root'
+        'file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/PF-Reco-Analysis/pf_only_reReco.root'
+        # 'file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/PF-Reco-Analysis/pf_only_reRecoAOD.root'
+        # 'file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/PF-Reco-Analysis/pf_only_reRecoAODfull.root'
     )
 )
 
@@ -25,7 +25,12 @@ process.pfObjectsNtupler = cms.EDAnalyzer("PFObjectsNtupler",
     pfCandidates = cms.InputTag("particleFlow"),
     ecalClusters = cms.InputTag("particleFlowClusterECAL"),
     hcalClusters = cms.InputTag("particleFlowClusterHCAL"),
-    pfBlocks = cms.InputTag("particleFlowBlock")
+    pfBlocks = cms.InputTag("particleFlowBlock"),
+    # adding rechits now
+    hbheRechits = cms.InputTag("hbhereco"), 
+    ecalRechitsEB = cms.InputTag("ecalRecHit", "EcalRecHitsEB"), 
+    ecalRechitsEE = cms.InputTag("ecalRecHit", "EcalRecHitsEE"),      
+    ecalRechitsES = cms.InputTag("ecalPreshowerRecHit", "EcalRecHitsES")
 )
 
 process.p = cms.Path(process.pfObjectsNtupler)
