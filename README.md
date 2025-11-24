@@ -15,25 +15,40 @@ voms-proxy-init --rfc --voms cms --valid 172:00
 
 cmsRun MyPFStudy_ReReco*_RAW2DIGI_L1Reco_RECO.py
 
-cmsRun MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py
+cmsRun MyPFStudy_ReReco_MC_Sim_RAW2DIGI_L1Reco_RECO.py
 ```
 The output will be `pf_only_reReco*.root` depending which files is run. Each one creates an output file at a different datatier: RECO, AOD, AODfull (with trigger results). AOD with trigger results can be run through the [DQM plotting framework](https://github.com/gk199/cmssw/blob/PFdevelopment/PF_README.md#monitoring-and-plotting-dqmoffline). 
 
 To check the event content, use `edmDumpEventContent` and search for the collection you are interested in:
 ```
-edmDumpEventContent pf_only_reReco_MC.root | grep EcalRecHits 
-edmDumpEventContent pf_only_reReco_MC.root | grep particleFlow 
+edmDumpEventContent pf_only_reReco_MC_Sim.root | grep EcalRecHits 
+edmDumpEventContent pf_only_reReco_MC_Sim.root | grep particleFlow 
 ```
 
 ## MC cmsDriver command
-For MC, a slightly different python config is needed (MC specific GlobalTag, MC flag, no pp scenario). The two config generations are given below:
+For MC, a slightly different python config is needed (MC specific GlobalTag, MC flag, no pp scenario). The two config generations are given below. For MC, add `outputCommands = cms.untracked.vstring('drop *', 'keep *_g4SimHits_*_*)' in `process.out` to keep the sim hits (for Simon's truth matching studies). 
 ```
-cmsDriver.py MyPFStudy_ReReco_MC --mc --conditions auto:phase1_2025_realistic --step RAW2DIGI,L1Reco,RECO --geometry DB --era Run3 --filein file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/SinglePiPt10_step1_GEN-SIM-RAW.root --fileout file:pf_only_reReco_MC.root --eventcontent RECO --datatier RECO --process ReRECO --customise_commands="process.out = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reReco.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsES_*')); process.outpath = cms.EndPath(process.out)" --no_exec -n 100
+cmsDriver.py MyPFStudy_ReReco_MC_Sim \
+    --mc --conditions auto:phase1_2025_realistic \
+    --step DIGI,RAW2DIGI,L1Reco,RECO --geometry DB \
+    --era Run3 --filein file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/SinglePiPt10_step1_GEN-SIM-RAW.root \
+    --fileout file:pf_only_reReco_MC_Sim.root \
+    --eventcontent RECO --datatier RECO --process ReRECO \
+    --customise_commands="process.RECOoutput = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reReco_MC_Sim.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*', 'keep *_g4SimHits_*_*'))" \
+    --no_exec -n 100
 ```
 
 ## Data cmsDriver command
+This keeps a reduced set of output collections: HCAL and ECAL rechits, PF clusters, blocks, and candidates.
 ```
-cmsDriver.py MyPFStudy_ReReco --data --conditions 150X_dataRun3_Prompt_v1 --step RAW2DIGI,L1Reco,RECO --geometry DB --era Run3 --scenario pp --filein root://cms-xrd-global.cern.ch//store/data/Run2025E/Muon0/RAW-RECO/MUOJME-PromptReco-v1/000/395/982/00000/01c7900e-0585-4df0-8f2e-23ba45358ed8.root --fileout file:pf_only_reReco.root --eventcontent RECO --datatier RECO --process ReRECO --customise_commands="process.out = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reReco.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsES_*')); process.outpath = cms.EndPath(process.out)" --no_exec -n 100
+cmsDriver.py MyPFStudy_ReReco \
+    --data --conditions 150X_dataRun3_Prompt_v1 \
+    --step RAW2DIGI,L1Reco,RECO --geometry DB \
+    --era Run3 --scenario pp --filein root://cms-xrd-global.cern.ch//store/data/Run2025E/Muon0/RAW-RECO/MUOJME-PromptReco-v1/000/395/982/00000/01c7900e-0585-4df0-8f2e-23ba45358ed8.root \
+    --fileout file:pf_only_reReco.root \
+    --eventcontent RECO --datatier RECO --process ReRECO \
+    --customise_commands="process.RECOoutput = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reReco.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*'))" \
+    --no_exec -n 100
 ```
 
 # Ntuple Production
@@ -48,6 +63,7 @@ The clusters and rechits are looped over in `PFObjectsNtupler.cc`. Edit this to 
 ```
 python3 Plotting/plot_pfObjects.py
 ```
+Outputs a root file with the histograms.
 
 # Event Display
 To do! 
