@@ -2,7 +2,7 @@
 # using: 
 # Revision: 1.19 
 # Source: /local/reps/CMSSW/CMSSW/Configuration/Applications/python/ConfigBuilder.py,v 
-# with command line options: MyPFStudy_ReRecoAODfull --data --conditions 150X_dataRun3_Prompt_v1 --step RAW2DIGI,L1Reco,RECO --geometry DB --era Run3 --scenario pp --filein root://cms-xrd-global.cern.ch//store/data/Run2025E/Muon0/RAW-RECO/MUOJME-PromptReco-v1/000/395/982/00000/01c7900e-0585-4df0-8f2e-23ba45358ed8.root --fileout file:pf_only_reRecoAODfull.root --eventcontent AOD --datatier AOD --process ReRECOtoAOD --customise_commands=process.AODoutput.outputCommands.extend(['keep *_particleFlow_*_*','keep *_particleFlowBlock_*_*','keep *_particleFlowCluster*_*_*', 'keep *_hbhereco_*_*']) --no_exec -n 100
+# with command line options: MyPFStudy_ReRecoAODfull --data --conditions 150X_dataRun3_Prompt_v1 --step RAW2DIGI,L1Reco,RECO --geometry DB --era Run3 --scenario pp --filein root://cms-xrd-global.cern.ch//store/data/Run2025E/Muon0/RAW-RECO/MUOJME-PromptReco-v1/000/395/982/00000/01c7900e-0585-4df0-8f2e-23ba45358ed8.root --fileout file:pf_only_reRecoAODfull.root --eventcontent AOD --datatier AOD --process ReRECOtoAOD --customise_commands=process.AODoutput.outputCommands.extend(['keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*']) --no_exec -n 100
 import FWCore.ParameterSet.Config as cms
 
 from Configuration.Eras.Era_Run3_cff import Run3
@@ -107,7 +107,8 @@ associatePatAlgosToolsTask(process)
 
 
 # Customisation from command line
-process.AODoutput.outputCommands.extend(['keep *_particleFlow_*_*','keep *_particleFlowBlock_*_*','keep *_particleFlowCluster*_*_*', 'keep *_hbhereco_*_*'])
+
+process.AODoutput.outputCommands.extend(['keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*'])
 #Have logErrorHarvester wait for the same EDProducers to finish as those providing data for the OutputModule
 from FWCore.Modules.logErrorHarvester_cff import customiseLogErrorHarvesterUsingOutputCommands
 process = customiseLogErrorHarvesterUsingOutputCommands(process)

@@ -15,7 +15,7 @@ voms-proxy-init --rfc --voms cms --valid 172:00
 
 cmsRun MyPFStudy_ReReco*_RAW2DIGI_L1Reco_RECO.py
 
-cmsRun MyPFStudy_ReReco_MC_Sim_RAW2DIGI_L1Reco_RECO.py
+cmsRun MyPFStudy_ReReco_MC_Sim_DIGI_RAW2DIGI_L1Reco_RECO.py
 ```
 The output will be `pf_only_reReco*.root` depending which files is run. Each one creates an output file at a different datatier: RECO, AOD, AODfull (with trigger results). AOD with trigger results can be run through the [DQM plotting framework](https://github.com/gk199/cmssw/blob/PFdevelopment/PF_README.md#monitoring-and-plotting-dqmoffline). 
 
@@ -49,6 +49,28 @@ cmsDriver.py MyPFStudy_ReReco \
     --eventcontent RECO --datatier RECO --process ReRECO \
     --customise_commands="process.RECOoutput = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reReco.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*'))" \
     --no_exec -n 100
+```
+
+At AOD level (useful for putting back into the DQM plotting code):
+```
+cmsDriver.py MyPFStudy_ReRecoAOD \
+    --data --conditions 150X_dataRun3_Prompt_v1 \
+    --step RAW2DIGI,L1Reco,RECO --geometry DB \
+    --era Run3 --scenario pp --filein root://cms-xrd-global.cern.ch//store/data/Run2025E/Muon0/RAW-RECO/MUOJME-PromptReco-v1/000/395/982/00000/01c7900e-0585-4df0-8f2e-23ba45358ed8.root \
+    --fileout file:pf_only_reRecoAOD.root \
+    --eventcontent AOD --datatier AOD --process ReRECOtoAOD \
+    --customise_commands="process.AODoutput = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reRecoAOD.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*'))" \
+    --no_exec -n 100
+```
+And saving all the trigger information:
+```
+cmsDriver.py MyPFStudy_ReRecoAODfull \
+    --data --conditions 150X_dataRun3_Prompt_v1 \
+    --step RAW2DIGI,L1Reco,RECO --geometry DB \
+    --era Run3 --scenario pp --filein root://cms-xrd-global.cern.ch//store/data/Run2025E/Muon0/RAW-RECO/MUOJME-PromptReco-v1/000/395/982/00000/01c7900e-0585-4df0-8f2e-23ba45358ed8.root --fileout file:pf_only_reRecoAODfull.root \
+    --eventcontent AOD --datatier AOD --process ReRECOtoAOD \
+    --customise_commands="process.AODoutput.outputCommands.extend(['keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*'])" \
+    --no_exec -n 100 
 ```
 
 # Ntuple Production
