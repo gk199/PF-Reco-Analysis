@@ -98,6 +98,10 @@ private:
   std::vector<int> he_rechit_counts_;
   std::vector<int> hb_rechit_tdc_; std::vector<int> he_rechit_tdc_;
   std::vector<float> hb_rechit_depth_; std::vector<float> he_rechit_depth_;
+  std::vector<float> hb_rechit_energy_;
+  std::vector<float> he_rechit_energy_;
+  std::vector<int> hb_rechit_clusterIdx_;
+  std::vector<int> he_rechit_clusterIdx_;
   std::vector<int> hbhe_ietaAbs_;
 
   // PF Blocks (just store number of elements for now)
@@ -175,20 +179,26 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
   tree_->Branch("hbhe_rechit_tdc", &hbhe_rechit_tdc_);
   tree_->Branch("hbheRechit_clusterIdx", &hbheRechit_clusterIdx_);
   tree_->Branch("hbhe_rechit_ietaAbs", &hbhe_ietaAbs_);
+  tree_->Branch("hbhe_rechit_counts", &hbhe_rechit_counts_);
+
   tree_->Branch("hb_rechit_tdc", &hb_rechit_tdc_);
   tree_->Branch("he_rechit_tdc", &he_rechit_tdc_);
   tree_->Branch("hb_rechit_depth", &hb_rechit_depth_);
   tree_->Branch("he_rechit_depth", &he_rechit_depth_);
   tree_->Branch("hb_rechit_counts", &hb_rechit_counts_);
   tree_->Branch("he_rechit_counts", &he_rechit_counts_);
-  tree_->Branch("hbhe_rechit_counts", &hbhe_rechit_counts_);
+  tree_->Branch("hb_rechit_energy", &hb_rechit_energy_);  
+  tree_->Branch("he_rechit_energy", &he_rechit_energy_);
+  tree_->Branch("hb_rechit_clusterIdx", &hb_rechit_clusterIdx_);
+  tree_->Branch("he_rechit_clusterIdx", &he_rechit_clusterIdx_);
+ 
   // PF block info
   tree_->Branch("num_pfBlocks", &num_pfBlocks_);
 }
 
 // Convert ieta to eta using HCAL mapping
 
-double hcalEtaFromIeta(int ieta) {
+static double hcalEtaFromIeta(int ieta) {
     // HB: |ieta| <= 16, HE: 17 <= |ieta| <= 28
     int sign = (ieta >= 0 ? 1 : -1);
     int absi = std::abs(ieta);
@@ -206,7 +216,7 @@ double hcalEtaFromIeta(int ieta) {
 }
 
 // Convert iphi to phi (HB/HE have 72 phi bins)
-double hcalPhiFromIphi(int iphi) {
+static double hcalPhiFromIphi(int iphi) {
     // HCAL iphi runs from 1..72
     double phi = (iphi - 1) * (M_PI / 36.0); // 2pi/72
     // Put phi into -pi, pi
@@ -242,16 +252,22 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
 
   hcal_energy_.clear(); hcal_eta_.clear(); hcal_phi_.clear(); hcal_time_.clear(); hcal_depth_.clear();
   
-  hbhe_rechit_energy_.clear(); hbhe_rechit_eta_.clear(); hbhe_rechit_phi_.clear(); hbhe_rechit_depth_.clear(); hbhe_rechit_time_.clear(); //hbhe_rechit_clusterIndex_.clear();
+  hbhe_rechit_energy_.clear(); hbhe_rechit_eta_.clear(); 
+  hbhe_rechit_phi_.clear(); hbhe_rechit_depth_.clear(); hbhe_rechit_time_.clear(); //hbhe_rechit_clusterIndex_.clear();
   hbhe_rechit_tdc_.clear();
   hbheRechit_clusterIdx_.clear(); clusterIdx_.clear();
-  hb_rechit_tdc_.clear(); he_rechit_tdc_.clear();
   hbhe_ietaAbs_.clear();
+  hbhe_rechit_counts_.clear();
+
+  hb_rechit_tdc_.clear(); he_rechit_tdc_.clear();
   hb_rechit_depth_.clear();
   he_rechit_depth_.clear();
-  hbhe_rechit_counts_.clear();
   hb_rechit_counts_.clear();  
   he_rechit_counts_.clear(); 
+  hb_rechit_energy_.clear();
+  he_rechit_energy_.clear();
+  hb_rechit_clusterIdx_.clear();
+  he_rechit_clusterIdx_.clear();
 
   num_pfBlocks_ = 0;
 
@@ -317,7 +333,6 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
         for (const auto& rh : *ebRecHits) {
 
           eb_count++;
-          eb_rechit_counts_.push_back(eb_count);
 
           // Raw detid for this rechit
           DetId detid = rh.id();
@@ -347,6 +362,7 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
           eb_rechit_time_.push_back(rh.time());
           eb_rechit_clusterIdx_.push_back(ecal_clusterIndex); // save cluster index association
         }
+        eb_rechit_counts_.push_back(eb_count);
       }
       
       // Loop over EE rechits   
@@ -355,7 +371,6 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
 
         for (const auto& rh : *eeRecHits) {
           ee_count++;
-          ee_rechit_counts_.push_back(ee_count);
          
           // Raw detid for this rechit
           DetId detid = rh.id();
@@ -383,6 +398,7 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
           ee_rechit_time_.push_back(rh.time());
           ee_rechit_clusterIdx_.push_back(ecal_clusterIndex); // save cluster index association
         }
+        ee_rechit_counts_.push_back(ee_count);
       }
       ecal_clusterIndex++;
     }
@@ -460,13 +476,16 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
             he_rechit_depth_.push_back(detid.depth());
             he_count++;
             he_rechit_counts_.push_back(he_count);
-
+            he_rechit_energy_.push_back(rh.energy());
+            he_rechit_clusterIdx_.push_back(clusterIndex); 
           } else {
             // HB rechit
             hb_rechit_tdc_.push_back(SOI_TDC);
             hb_rechit_depth_.push_back(detid.depth());
             hb_count++;
             hb_rechit_counts_.push_back(hb_count);
+            hb_rechit_energy_.push_back(rh.energy());
+            hb_rechit_clusterIdx_.push_back(clusterIndex);
           }
           
           hbheRechit_clusterIdx_.push_back(clusterIndex); // save cluster index association so it is possible to map backwards to the cluster this rechit was near);
