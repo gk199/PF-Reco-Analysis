@@ -8,24 +8,27 @@ from matplotlib.widgets import Button
 # Load ROOT file
 ###############################################################################
 
-file = uproot.open("../../Downloads/pfObjectsNtuple.root") # path to your root file from the ntupler
-directory = file["pfObjectsNtupler"] 
+# file = uproot.open("../../Downloads/pfObjectsNtuple.root") # path to your root file from the ntupler
+# directory = file["pfObjectsNtupler"] 
+file = uproot.open("../../Downloads/pfObjectsNtuple_tdc.root") # path to your root file from the ntupler
+directory = file["pfObjectsNtuplertdc"] 
 tree = directory["pfTree"]
 
 # HCAL clusters
 hcal_eta    = tree["hcal_eta"].array(library="ak")
 hcal_phi    = tree["hcal_phi"].array(library="ak")
 hcal_energy = tree["hcal_energy"].array(library="ak")
-hcal_time   = tree["hcal_time"].array(library="ak")
+# hcal_time   = tree["hcal_time"].array(library="ak")
 hcal_depth  = tree["hcal_depth"].array(library="ak")
 
 # HBHE rechits
 rh_eta    = tree["hbhe_rechit_eta"].array(library="ak")
 rh_phi    = tree["hbhe_rechit_phi"].array(library="ak")
 rh_energy = tree["hbhe_rechit_energy"].array(library="ak")
-rh_time   = tree["hbhe_rechit_time"].array(library="ak")
+# rh_time   = tree["hbhe_rechit_time"].array(library="ak")
+rh_time   = tree["hbhe_rechit_tdc"].array(library="ak")
 rh_depth  = tree["hbhe_rechit_depth"].array(library="ak")
-rh_clusterIndex = tree["hbhe_rechit_clusterIndex"].array(library="ak")
+rh_clusterIndex = tree["hbheRechit_clusterIdx"].array(library="ak")
 
 ###############################################################################
 # HCAL Event Display
@@ -37,9 +40,10 @@ class HCALEventDisplay:
         self.cluster_index = 0
 
         # Figure with 2x4 subplots (top row is energy, lower is timing)
-        self.fig = plt.figure(figsize=(14, 10))
+        self.fig = plt.figure(figsize=(18, 10))
         self.ax = [self.fig.add_subplot(2, 4, i+1) for i in range(8)]
-        plt.subplots_adjust(wspace=0.25, hspace=0.25)
+        plt.subplots_adjust(left=0.25, right=0.95)
+        plt.subplots_adjust(wspace=0.2, hspace=0.2)
 
         # Initialize axes: titles, labels, aspect, limits
         for d in range(4):
@@ -121,7 +125,11 @@ class HCALEventDisplay:
             for t in self.cluster_summary: t.remove()
         self.cluster_summary = []
 
-        for i in range(nClusters):
+        # only plot clusters over 2 GeV 
+        counter = 0
+        energies = ak.to_numpy(hcal_energy[event])
+        valid_clusters = np.where(energies > 2.0)[0]
+        for i in valid_clusters:
             summary_lines = (
                 f"{i:2d}: "
                 f"E={float(hcal_energy[event][i]):5.2f}  "
@@ -136,7 +144,7 @@ class HCALEventDisplay:
             dy = 0.018 # offset for each line
             # Add new annotation (figure coordinates)
             t = self.fig.text(
-                0.03, 0.98 - i * dy,        # x,y in figure coordinates, dy to move down a line each time
+                0.03, 0.98 - counter * dy,        # x,y in figure coordinates, dy to move down a line each time
                 summary_lines,
                 ha="left", va="top",
                 fontsize=10,
@@ -144,6 +152,7 @@ class HCALEventDisplay:
                 fontweight=weight
             )
             self.cluster_summary.append(t)
+            counter += 1
 
 
         # Remove old scatter plots and outlines
@@ -163,6 +172,28 @@ class HCALEventDisplay:
             return
 
         idx = self.cluster_index
+        # ---------------------------------------------------------
+        # Skip clusters with energy < 2 GeV
+        # ---------------------------------------------------------
+        energies = ak.to_numpy(hcal_energy[event])
+        valid = np.where(energies > 2.0)[0]
+
+        if len(valid) == 0:
+            # No clusters above threshold in this event
+            self.fig.suptitle(f"Event {event}: No clusters with E > 1 GeV", fontsize=16)
+            self.fig.canvas.draw_idle()
+            return
+
+        # Snap cluster_index to nearest valid cluster
+        if idx not in valid:
+            # find closest valid index after current
+            next_valid = valid[valid >= idx]
+            if len(next_valid) == 0:
+                idx = valid[0]
+            else:
+                idx = next_valid[0]
+            self.cluster_index = idx
+
         if idx >= nClusters:
             idx = 0
             self.cluster_index = 0
@@ -240,7 +271,7 @@ class HCALEventDisplay:
 
         if self.cbar_time is None:
             self.cbar_time = self.fig.colorbar(scT_sample, ax=self.ax[4:8], location="right", fraction=0.02)
-            self.cbar_time.set_label("Time [ns]")
+            self.cbar_time.set_label("Time [TDC codes]")
         else:
             self.cbar_time.mappable.set_array(time)
             self.cbar_time.mappable.set_clim(vminT, vmaxT)
