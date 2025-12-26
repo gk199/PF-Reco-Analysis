@@ -16,7 +16,7 @@ out = ROOT.TFile("pfObjectsHistos_addedcuts.root", "RECREATE")
 
 # Define histograms
 eb_rechit_time   = ROOT.TH1F("eb_rechit_time",   "ECAL Barrel, Rechit Time;t [ns];Entries", 50, -25, 25)
-eb_rechit_counts  = ROOT.TH1F("eb_rechit_counts", "ECAL Barrel, # of Rechits Per Cluster (After Cuts)", 15, 15, 45)
+eb_rechit_counts  = ROOT.TH1F("eb_rechit_counts", "ECAL Barrel, # of Rechits Per Cluster (After Cuts)", 40, 15, 400)
 eb_rechit_energy = ROOT.TH1F("eb_rechit_energy", "ECAL Barrel, Rechit Energy;E [GeV];Entries", 50, 0, 25)
 
 hb_rechit_tdc = ROOT.TH1F("hb_rechit_tdc", "HCAL Barrel Rechits TDC",4,0,4)
