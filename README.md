@@ -7,6 +7,21 @@ cd PF-Reco-Analysis
 git branch <your-dev-branch>
 ```
 
+To get both this setup as well as the DQM PF monitoring area: 
+```
+cmsrel CMSSW_15_0_6
+cd CMSSW_15_0_6/src
+cmsenv
+git cms-addpkg RecoParticleFlow/PFClusterProducer
+git clone git@github.com:gk199/PF-Reco-Analysis.git
+scram b -j 8
+
+git remote add origin git@github.com:gk199/cmssw.git
+git fetch origin PFdevelopment
+git sparse-checkout list
+git checkout origin/PFdevelopment -- DQMOffline/ParticleFlow PF_README.md
+```
+
 # Run re-reco
 Given a data or MC file at RECO level, re-reco is run to save the PF clusters (ECAL, HCAL), blocks, and candidates. The ECAL (EBEE, saving preshower not working currently) and HCAL (HBHE, HO) raw rechits are also saved. To run, change the path to the data file in `MyPFStudy_ReReco*_RAW2DIGI_L1Reco_RECO.py` and the number of events to run over, and run:
 ```
