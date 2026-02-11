@@ -12,6 +12,7 @@ To get both this setup as well as the DQM PF monitoring area:
 cmsrel CMSSW_15_0_6
 cd CMSSW_15_0_6/src
 cmsenv
+git cms-addpkg HLTrigger/Configuration
 git cms-addpkg RecoParticleFlow/PFClusterProducer
 git clone git@github.com:gk199/PF-Reco-Analysis.git
 scram b -j 8
@@ -20,6 +21,33 @@ git remote add origin git@github.com:gk199/cmssw.git
 git fetch origin PFdevelopment
 git sparse-checkout list
 git checkout origin/PFdevelopment -- DQMOffline/ParticleFlow PF_README.md
+```
+
+## Files from SPVCNN 
+The instructions are [here](https://github.com/wpmccormack/spvcnn_instructions/tree/main), however, I am still in the process of adopting this to the newer CMSSW release where current PF studies are done. 
+
+Follow the instructions in the SPVCNN area to put this in `CMSSW_13_0_X`. Get the files with: 
+```
+git diff --name-only CMSSW_13_3_0_pre5...wpmccormack/add_spvcnn 
+git diff CMSSW_13_3_0_pre5...wpmccormack/add_spvcnn <file_path>
+```
+and try to combine with the `15_0_6` area. 
+
+The files added are:
+```
+new files:
+HLTrigger/Configuration/python/HLT_GRun_SONIC_cff.py (copied over)
+RecoParticleFlow/PFClusterProducer/plugins/PFClusterSonicProducer.cc (copied over, added PF cut from DB)
+
+RecoParticleFlow/PFClusterProducer/plugins/PFTruthClusterProducer2.cc (causes many errors, unclear if truth is needed now)
+RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_TRUTH2_thresholds2_cfi.py
+
+edited files:
+RecoParticleFlow/PFClusterProducer/BuildFile.xml (changes copied over)
+RecoParticleFlow/PFClusterProducer/plugins/BuildFile.xml (changes copied over)
+RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py (copied over, merged with existing code)
+
+RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_original_cfi.py
 ```
 
 # Run re-reco
