@@ -50,6 +50,20 @@ RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py (copied
 RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_original_cfi.py
 ```
 
+# Testing new PF Algorithms
+```
+cp RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
+cp RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
+scram b -j 8
+cd PF-Reco-Analysis
+```
+
+Reverting back to the origional ones:
+```
+cp RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
+cp RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
+```
+
 # Run re-reco
 Given a data or MC file at RECO level, re-reco is run to save the PF clusters (ECAL, HCAL), blocks, and candidates. The ECAL (EBEE, saving preshower not working currently) and HCAL (HBHE, HO) raw rechits are also saved. To run, change the path to the data file in `MyPFStudy_ReReco*_RAW2DIGI_L1Reco_RECO.py` and the number of events to run over, and run:
 ```
