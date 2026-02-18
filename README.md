@@ -51,17 +51,19 @@ RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_original_cfi.p
 ```
 
 # Testing new PF Algorithms
+The timing algorithm also places a ``similar in time`` constraint in the gathering step. The threshold can be further optimized as well. To use these files in the re-reco, copy the modified files and remember to recompile:
 ```
-cp RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
-cp RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
+cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
+cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
 scram b -j 8
 cd PF-Reco-Analysis
 ```
 
-Reverting back to the origional ones:
+Reverting back to the original ones:
 ```
-cp RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
-cp RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
+cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
+cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
+scram b -j 8
 ```
 
 # Run re-reco
