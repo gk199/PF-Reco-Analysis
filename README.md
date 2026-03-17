@@ -23,38 +23,34 @@ git sparse-checkout list
 git checkout origin/PFdevelopment -- DQMOffline/ParticleFlow PF_README.md
 ```
 
-## Files from SPVCNN 
-The instructions are [here](https://github.com/wpmccormack/spvcnn_instructions/tree/main), however, I am still in the process of adopting this to the newer CMSSW release where current PF studies are done. 
-
-Follow the instructions in the SPVCNN area to put this in `CMSSW_13_0_X`. Get the files with: 
-```
-git diff --name-only CMSSW_13_3_0_pre5...wpmccormack/add_spvcnn 
-git diff CMSSW_13_3_0_pre5...wpmccormack/add_spvcnn <file_path>
-```
-and try to combine with the `15_0_6` area. 
-
-The files added are:
-```
-new files:
-HLTrigger/Configuration/python/HLT_GRun_SONIC_cff.py (copied over)
-RecoParticleFlow/PFClusterProducer/plugins/PFClusterSonicProducer.cc (copied over, added PF cut from DB)
-
-RecoParticleFlow/PFClusterProducer/plugins/PFTruthClusterProducer2.cc (causes many errors, unclear if truth is needed now)
-RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_TRUTH2_thresholds2_cfi.py
-
-edited files:
-RecoParticleFlow/PFClusterProducer/BuildFile.xml (changes copied over)
-RecoParticleFlow/PFClusterProducer/plugins/BuildFile.xml (changes copied over)
-RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py (copied over, merged with existing code)
-
-RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_original_cfi.py
-```
-
 # Testing new PF Algorithms
-The timing algorithm also places a ``similar in time`` constraint in the gathering step. The threshold can be further optimized as well. To use these files in the re-reco, copy the modified files and remember to recompile:
+The timing algorithm also places a "similar in time" constraint in the gathering step. The threshold can be further optimized as well. To use these files in the re-reco, copy the modified files and remember to recompile.
+
+Option 1 (`timing`): cell level timing cut vs global highest energy seed:
 ```
 cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
 cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
+cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc 
+cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
+
+scram b -j 8
+cd PF-Reco-Analysis
+```
+
+Option 2 (`seedTiming`): seed level timing cut vs global highest energy seed:
+```
+cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_seedTiming.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc 
+cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_seedTiming_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
+
+scram b -j 8
+cd PF-Reco-Analysis
+```
+
+Option 3 (`depth1Timing`): seed level timing cut vs first depth cluster seed:
+```
+cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_depth1Timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc 
+cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_depth1Timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
+
 scram b -j 8
 cd PF-Reco-Analysis
 ```
@@ -63,6 +59,9 @@ Reverting back to the original ones:
 ```
 cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
 cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
+cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc 
+cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
+
 scram b -j 8
 ```
 
@@ -76,7 +75,7 @@ cmsRun MyPFStudy_ReReco*_RAW2DIGI_L1Reco_RECO.py
 
 cmsRun MyPFStudy_ReReco_MC_Sim_DIGI_RAW2DIGI_L1Reco_RECO.py
 ```
-The output will be `pf_only_reReco*.root` depending which files is run. Each one creates an output file at a different datatier. For data, the options are: RECO, AOD, AODfull (with trigger results). AOD with trigger results can be run through the [DQM plotting framework](https://github.com/gk199/cmssw/blob/PFdevelopment/PF_README.md#monitoring-and-plotting-dqmoffline). For MC, the options are: `MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py` to save PF clusters, cands, and rechits; or `MyPFStudy_ReReco_MC_Sim_DIGI_RAW2DIGI_L1Reco_RECO.py` to also save g4 sim hits and gen particles (compatible with Simon's framework). 
+The output will be `pf_only_reReco*.root` depending which files is run. Each one creates an output file at a different datatier. For data, the options are: RECO, AOD, AODfull (with trigger results). AOD with trigger results can be run through the [DQM plotting framework](https://github.com/gk199/cmssw/blob/PFdevelopment/PF_README.md#monitoring-and-plotting-dqmoffline). For MC, the options are: `MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py` to save PF clusters, cands, and rechits; or `MyPFStudy_ReReco_MC_Sim_DIGI_RAW2DIGI_L1Reco_RECO.py` to also save g4 sim hits and gen particles (the default, as it is compatible with Simon's framework). 
 
 To check the event content, use `edmDumpEventContent` and search for the collection you are interested in:
 ```
@@ -158,10 +157,37 @@ Run from a conda virtual environment (I run this locally on my laptop to interac
 
 ToDo: currently using MAHI time, would like to plot from TDC time! 
 
+## Files from SPVCNN 
+The instructions are [here](https://github.com/wpmccormack/spvcnn_instructions/tree/main), however, I am still in the process of adopting this to the newer CMSSW release where current PF studies are done. 
+
+Follow the instructions in the SPVCNN area to put this in `CMSSW_13_0_X`. Get the files with: 
+```
+git diff --name-only CMSSW_13_3_0_pre5...wpmccormack/add_spvcnn 
+git diff CMSSW_13_3_0_pre5...wpmccormack/add_spvcnn <file_path>
+```
+and try to combine with the `15_0_6` area. 
+
+The files added are:
+```
+new files:
+HLTrigger/Configuration/python/HLT_GRun_SONIC_cff.py (copied over)
+RecoParticleFlow/PFClusterProducer/plugins/PFClusterSonicProducer.cc (copied over, added PF cut from DB)
+
+RecoParticleFlow/PFClusterProducer/plugins/PFTruthClusterProducer2.cc (causes many errors, unclear if truth is needed now)
+RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_TRUTH2_thresholds2_cfi.py
+
+edited files:
+RecoParticleFlow/PFClusterProducer/BuildFile.xml (changes copied over)
+RecoParticleFlow/PFClusterProducer/plugins/BuildFile.xml (changes copied over)
+RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py (copied over, merged with existing code)
+
+RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_original_cfi.py
+```
+
 # Wish List
 - Setup re-reco to run with CRAB jobs for re-processing CMS datasets
 - Setup re-reco step to run with Condor jobs for re-processing of MC data files
 - Add ECAL rechits to PFObjectsNtupler.cc, with matching to clusters
 - Extend plotting to include rechits, clusters, blocks, and PF candidates
-- Add HCAL PF cuts to rechits kept for analysis 
+- Add HCAL PF cuts to rechits kept for analysis: DONE, and also moved to using PF rechits instead of HCAL rechits
 - Write event display code for clusters and rechits: DONE
