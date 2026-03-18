@@ -39,7 +39,7 @@ private:
   // Tokens
   edm::EDGetTokenT<std::vector<reco::PFCandidate>> pfCandidatesToken_;
   edm::EDGetTokenT<std::vector<reco::PFCluster>> ecalClustersToken_;
-  edm::EDGetTokenT<std::vector<reco::PFCluster>> hcalClustersToken_;
+  edm::EDGetTokenT<std::vector<reco::PFCluster>> hcalClustersToken_;      // particleFlowClusterHCAL  (post-depth-stacking)
   edm::EDGetTokenT<edm::SortedCollection<HBHERecHit>> hbheRechitsToken_;
   edm::EDGetTokenT<EcalRecHitCollection> ebRechitsToken_;
   edm::EDGetTokenT<EcalRecHitCollection> eeRechitsToken_;
@@ -60,10 +60,10 @@ private:
   // ECAL rechits
   std::vector<float> eb_rechit_energy_; std::vector<float> eb_rechit_eta_; std::vector<float> eb_rechit_phi_; std::vector<float> eb_rechit_time_; std::vector<int> eb_rechit_clusterIndex_; 
 
-  // HCAL clusters
+  // HCAL clusters (post-depth-stacking: particleFlowClusterHCAL)
   std::vector<float> hcal_energy_, hcal_eta_, hcal_phi_, hcal_time_, hcal_depth_;
   // HBHE rechits associated to clusters
-  std::vector<float> hbhe_rechit_energy_; std::vector<float> hbhe_rechit_eta_; std::vector<float> hbhe_rechit_phi_; std::vector<float> hbhe_rechit_depth_; std::vector<float> hbhe_rechit_time_; std::vector<int> hbhe_rechit_clusterIndex_; 
+  std::vector<float> hbhe_rechit_energy_; std::vector<float> hbhe_rechit_eta_; std::vector<float> hbhe_rechit_phi_; std::vector<float> hbhe_rechit_depth_; std::vector<float> hbhe_rechit_time_; std::vector<int> hbhe_rechit_clusterIndex_;
 
   // PF Blocks (just store number of elements for now)
   int num_pfBlocks_;
@@ -74,7 +74,7 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
   usesResource("TFileService");
   pfCandidatesToken_ = consumes<std::vector<reco::PFCandidate>>(iConfig.getParameter<edm::InputTag>("pfCandidates"));
   ecalClustersToken_ = consumes<std::vector<reco::PFCluster>>(iConfig.getParameter<edm::InputTag>("ecalClusters"));
-  hcalClustersToken_ = consumes<std::vector<reco::PFCluster>>(iConfig.getParameter<edm::InputTag>("hcalClusters"));
+  hcalClustersToken_  = consumes<std::vector<reco::PFCluster>>(iConfig.getParameter<edm::InputTag>("hcalClusters"));
   hbheRechitsToken_ = consumes<edm::SortedCollection<HBHERecHit>>(edm::InputTag("hbhereco", "", "ReRECO")); // make sure this matches the input file! 
   ebRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalRecHit", "EcalRecHitsEB", "ReRECO")); 
   eeRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalRecHit", "EcalRecHitsEE", "ReRECO")); 
@@ -100,7 +100,7 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
   tree_->Branch("ecal_phi", &ecal_phi_);
   tree_->Branch("ecal_time", &ecal_time_);
 
-  // HCAL cluster branches
+  // HCAL cluster branches (post-depth-stacking: particleFlowClusterHCAL)
   tree_->Branch("hcal_energy", &hcal_energy_);
   tree_->Branch("hcal_eta", &hcal_eta_);
   tree_->Branch("hcal_phi", &hcal_phi_);
@@ -120,21 +120,25 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
 
 // Convert ieta to eta using HCAL mapping
 
-double hcalEtaFromIeta(int ieta) {
+static double hcalEtaFromIeta(int ieta) {
     // HB: |ieta| <= 16, HE: 17 <= |ieta| <= 28
     int sign = (ieta >= 0 ? 1 : -1);
     int absi = std::abs(ieta);
 
     double eta = 0.0;
-
-    if (absi <= 16) { // HB
-        eta = 0.087 * (absi - 0.5);
-    } else if (absi <= 28) { // HE
-        eta = 0.087 * (16 + (absi - 16) * 0.9); // approximate
-    } else { // HF etc; nothing should be outside really
-        eta = 40.0; //placeholder
+    if (absi >= 24){
+      eta = 0.1695 * ieta - sign*1.9931; 
+    } else {
+      eta = 0.0875*ieta - sign*0.0489;
     }
-    return sign * eta;
+    // if (absi <= 16) { // HB
+    //     eta = 0.087 * (absi - 0.5);
+    // } else if (absi <= 28) { // HE
+    //     eta = 0.087 * (16 + (absi - 16) * 0.9); // approximate
+    // } else { // HF etc; nothing should be outside really
+    //     eta = 40.0; //placeholder
+    // }
+    return eta;
 }
 
 // Convert iphi to phi (HB/HE have 72 phi bins)
@@ -201,7 +205,7 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup&)
   iEvent.getByToken(eeRechitsToken_, eeRecHits);
   iEvent.getByToken(esRechitsToken_, esRecHits);
 
-  // HCAL Clusters
+  // HCAL Clusters (post-depth-stacking: particleFlowClusterHCAL)
   edm::Handle<std::vector<reco::PFCluster>> hcalClusters;
   iEvent.getByToken(hcalClustersToken_, hcalClusters);
 

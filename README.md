@@ -24,14 +24,26 @@ git checkout origin/PFdevelopment -- DQMOffline/ParticleFlow PF_README.md
 ```
 
 # Testing new PF Algorithms
+## Bash Script for New Algos and Re-Reco
+```
+./TestAllParticleFlow.sh
+```
+Since most of the timing checks are done at the depth cluster stacking level, the timing cut can actually be scanned by just changing a parameter in the python file (no re-compiling needed):
+```
+emacs PFTestingAlgos/particleFlowClusterHCAL_*_cfi.py
+```
+Edit the line `timeThreshold = cms.untracked.double(3.0),  # ns`. Make sure this is a smaller value than is listed in `Basic2DGenericTopoClusterizer_timing.cc.edit` in the line `_timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 5.0)) {}`, otherwise this should also be edited. 
+
+## Full Details
 The timing algorithm also places a "similar in time" constraint in the gathering step. The threshold can be further optimized as well. To use these files in the re-reco, copy the modified files and remember to recompile.
 
 Option 1 (`timing`): cell level timing cut vs global highest energy seed:
 ```
-cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
-cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
-cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc 
-cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
+cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py
+cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc
+cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc
+cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterProducer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterProducer.cc
+cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py
 
 scram b -j 8
 cd PF-Reco-Analysis
@@ -39,8 +51,9 @@ cd PF-Reco-Analysis
 
 Option 2 (`seedTiming`): seed level timing cut vs global highest energy seed:
 ```
-cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_seedTiming.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc 
-cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_seedTiming_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
+cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_seedTiming.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc
+cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterProducer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterProducer.cc
+cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_seedTiming_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py
 
 scram b -j 8
 cd PF-Reco-Analysis
@@ -48,8 +61,9 @@ cd PF-Reco-Analysis
 
 Option 3 (`depth1Timing`): seed level timing cut vs first depth cluster seed:
 ```
-cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_depth1Timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc 
-cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_depth1Timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
+cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_depth1Timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc
+cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterProducer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterProducer.cc
+cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_depth1Timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py
 
 scram b -j 8
 cd PF-Reco-Analysis
@@ -57,10 +71,11 @@ cd PF-Reco-Analysis
 
 Reverting back to the original ones:
 ```
-cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
-cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
-cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc 
-cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
+cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py
+cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc
+cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc
+cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterProducer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterProducer.cc
+cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py
 
 scram b -j 8
 ```
@@ -84,7 +99,7 @@ edmDumpEventContent pf_only_reReco_MC_Sim.root | grep particleFlow
 ```
 
 ## MC cmsDriver command
-For MC, a slightly different python config is needed (MC specific GlobalTag, MC flag, no pp scenario). The two config generations are given below. For MC, add `outputCommands = cms.untracked.vstring('drop *', 'keep *_g4SimHits_*_*', 'keep *_genParticles_*_*') in `process.out` to keep the sim hits and gen particles (for Simon's truth matching studies). 
+For MC, a slightly different python config is needed (MC specific GlobalTag, MC flag, no pp scenario). The two config generations are given below. For MC, add `outputCommands = cms.untracked.vstring('drop *', 'keep *_g4SimHits_*_*', 'keep *_genParticles_*_*')` in `process.out` to keep the sim hits and gen particles (for Simon's truth matching studies). 
 ```
 cmsDriver.py MyPFStudy_ReReco_MC_Sim \
     --mc --conditions auto:phase1_2025_realistic \
@@ -135,15 +150,29 @@ cmsDriver.py MyPFStudy_ReRecoAODfull \
 Change the root file listed in the plotting script as needed, and then run: 
 ```
 scram b -j 8
-cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py
+cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
+    inputFiles=file:pf_only_reReco_MC_Sim_standardPF.root \
+    outputFile=pfObjectsNtuple_standardPF.root
+```
+or with the bash script:
+```
+./NtupleAllParticleFlow.sh
 ```
 The clusters and rechits are looped over in `PFObjectsNtupler.cc`. Edit this to change the matching and what final output variables are filled in the ntuple. This will produce a file called `pfObjectsNtuple.root` that is now used in the plotting / analysis step.
+
+Note that the Global Tag in `runPFObjectsNtupler_cfg.py` may need to be adjusted between data and MC. 
 
 # Plotting
 ```
 python3 Plotting/plot_pfObjects.py
 ```
-Outputs a root file with the histograms.
+Outputs a root file with the histograms. This will save the PF candidate pT, eta, and ECAL and HCAL cluster energy.
+
+To compare the clusters across different algorithms:
+```
+python3 Plotting/compare_hcal_clusters.py --inputdir . --output hcal_comparison.root --pdf hcal_comparison.pdf
+```
+This will plot the number of HCAL clusters per event, total HCAL cluster energy, and HBHE hits per cluster.
 
 # Event Display
 The event display is done from the `pfObjectsNtuple.root`.

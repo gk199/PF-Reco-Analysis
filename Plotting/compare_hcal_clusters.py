@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""
+Compare HCAL cluster properties across four PF algorithm variants:
+  - standardPF
+  - cellTimingPF
+  - seedTimingPF
+  - depth1SeedTimingPF
+
+Source collection: particleFlowClusterHCAL (post-depth-stacking)
+
+Plots:
+  1. Number of HCAL clusters per event
+  2. Total HCAL cluster energy per event
+  3. Number of HBHE hits per HCAL cluster (from rechit-cluster matching)
+"""
+
+import argparse
+import ROOT
+from collections import Counter
+
+ROOT.gROOT.SetBatch(True)
+ROOT.gStyle.SetOptStat(0)
+
+parser = argparse.ArgumentParser(description="Compare HCAL clusters across PF approaches")
+parser.add_argument("--inputdir", default=".", help="Directory containing pfObjectsNtuple_*.root files")
+parser.add_argument("--output",   default="hcal_cluster_comparison.root", help="Output ROOT file")
+parser.add_argument("--pdf",      default="hcal_cluster_comparison.pdf",  help="Output PDF with all plots")
+args = parser.parse_args()
+
+LABELS = ["standardPF", "cellTimingPF", "seedTimingPF", "depth1SeedTimingPF"]
+COLORS = [ROOT.kBlack, ROOT.kRed, ROOT.kBlue, ROOT.kGreen + 2]
+STYLES = [1, 2, 7, 9]  # solid, dashed, dot-dashed, dotted
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+def open_tree(label):
+    fname = f"{args.inputdir}/pfObjectsNtuple_{label}.root"
+    f = ROOT.TFile.Open(fname)
+    if not f or f.IsZombie():
+        raise RuntimeError(f"Cannot open {fname}")
+    t = f.Get("pfObjectsNtupler/pfTree")
+    if not t:
+        raise RuntimeError(f"TTree not found in {fname}")
+    return f, t
+
+
+def style_hist(h, color, lstyle):
+    h.SetLineColor(color)
+    h.SetLineStyle(lstyle)
+    h.SetLineWidth(2)
+    h.SetTitle("")
+    return h
+
+
+def make_legend(hists, labels):
+    leg = ROOT.TLegend(0.55, 0.65, 0.88, 0.88)
+    leg.SetBorderSize(0)
+    leg.SetFillStyle(0)
+    leg.SetTextSize(0.035)
+    for h, lbl in zip(hists, labels):
+        leg.AddEntry(h, lbl, "l")
+    return leg
+
+
+def draw_overlay(canvas, hists, labels, xtitle, logy=False):
+    """Normalise to unit area and overlay histograms. Returns clones (keep-alive)."""
+    canvas.Clear()
+    canvas.SetLogy(1 if logy else 0)
+
+    normed = []
+    for h in hists:
+        hn = h.Clone(h.GetName() + "_norm")
+        integral = hn.Integral()
+        if integral > 0:
+            hn.Scale(1.0 / integral)
+        normed.append(hn)
+
+    ymax = max(hn.GetMaximum() for hn in normed) * 1.4
+    for i, hn in enumerate(normed):
+        hn.GetXaxis().SetTitle(xtitle)
+        hn.GetYaxis().SetTitle("Normalised entries")
+        hn.SetMaximum(ymax)
+        hn.Draw("HIST" if i == 0 else "HIST SAME")
+
+    leg = make_legend(normed, labels)
+    leg.Draw()
+    canvas.Update()
+    return normed, leg  # keep alive
+
+
+# ── book histograms ───────────────────────────────────────────────────────────
+
+# particleFlowClusterHCAL (post-depth-stacking)
+h_ncl   = {}   # N clusters per event
+h_etot  = {}   # total cluster energy per event
+h_nhits = {}   # hits per cluster (uses hbhe_rechit_clusterIndex)
+
+for label in LABELS:
+    h_ncl[label]   = ROOT.TH1F(f"h_ncl_{label}",
+        f"{label} — HCAL clusters/event;N_{{clusters}};Entries",
+        60, 0, 60)
+    h_etot[label]  = ROOT.TH1F(f"h_etot_{label}",
+        f"{label} — HCAL total cluster energy/event;#SigmaE [GeV];Entries",
+        100, 0, 500)
+    h_nhits[label] = ROOT.TH1F(f"h_nhits_{label}",
+        f"{label} — HBHE hits per HCAL cluster;N_{{hits}};Entries",
+        30, 0, 30)
+
+# ── fill histograms ───────────────────────────────────────────────────────────
+
+files = {}
+for label in LABELS:
+    try:
+        f, tree = open_tree(label)
+    except RuntimeError as e:
+        print(f"WARNING: {e} — skipping {label}")
+        continue
+    files[label] = f
+
+    print(f"Processing {label}: {tree.GetEntries()} events")
+
+    for event in tree:
+        n_cl = len(event.hcal_energy)
+        h_ncl[label].Fill(n_cl)
+        h_etot[label].Fill(sum(event.hcal_energy))
+
+        hit_counts = Counter(event.hbhe_rechit_clusterIndex)
+        for cl_idx in range(n_cl):
+            h_nhits[label].Fill(hit_counts.get(cl_idx, 0))
+
+# ── apply styles ──────────────────────────────────────────────────────────────
+
+for i, label in enumerate(LABELS):
+    for d in [h_ncl, h_etot, h_nhits]:
+        style_hist(d[label], COLORS[i], STYLES[i])
+
+# ── draw and save ─────────────────────────────────────────────────────────────
+
+out = ROOT.TFile(args.output, "RECREATE")
+canvas = ROOT.TCanvas("c", "", 800, 600)
+canvas.Print(f"{args.pdf}[")
+
+active = [l for l in LABELS if l in files]
+
+kept = []  # keep normalised hists and legends alive for the duration of printing
+
+canvas.cd()
+latex = ROOT.TLatex()
+latex.SetNDC()
+latex.SetTextSize(0.04)
+
+n1, l1 = draw_overlay(canvas,
+    [h_ncl[l] for l in active], active,
+    "N_{clusters} per event")
+latex.DrawLatex(0.13, 0.93, "particleFlowClusterHCAL")
+canvas.Print(args.pdf)
+kept += [n1, l1]
+
+n2, l2 = draw_overlay(canvas,
+    [h_etot[l] for l in active], active,
+    "#SigmaE per event [GeV]")
+latex.DrawLatex(0.13, 0.93, "particleFlowClusterHCAL")
+canvas.Print(args.pdf)
+kept += [n2, l2]
+
+n3, l3 = draw_overlay(canvas,
+    [h_nhits[l] for l in active], active,
+    "N_{HBHE hits} per cluster",
+    logy=True)
+latex.DrawLatex(0.13, 0.93, "particleFlowClusterHCAL")
+canvas.Print(args.pdf)
+kept += [n3, l3]
+
+canvas.Print(f"{args.pdf}]")
+
+# Write raw (unnormalised) histograms to ROOT file
+out.cd()
+for label in active:
+    h_ncl[label].Write()
+    h_etot[label].Write()
+    h_nhits[label].Write()
+out.Close()
+
+print(f"Plots saved to {args.pdf}")
+print(f"Histograms saved to {args.output}")
