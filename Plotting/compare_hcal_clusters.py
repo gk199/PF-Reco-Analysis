@@ -62,9 +62,27 @@ def make_legend(hists, labels):
     return leg
 
 
+def draw_cms_label():
+    """Draw the standard CMS Simulation label in the top margin."""
+    cms = ROOT.TLatex()
+    cms.SetTextFont(42)
+    cms.SetTextAlign(11)
+    cms.SetTextSize(0.04)
+    cms.DrawLatexNDC(0.12, 0.935, "#bf{CMS}")
+    # cms.DrawLatexNDC(0.12, 0.935, "{#bf{CMS} #it{Simulation}}")
+
+    coll = ROOT.TLatex()
+    coll.SetTextFont(42)
+    coll.SetTextAlign(31)
+    coll.SetTextSize(0.035)
+    coll.DrawLatexNDC(0.90, 0.935, "particleFlowClusterHCAL")
+    return cms, coll  # keep alive
+
+
 def draw_overlay(canvas, hists, labels, xtitle, logy=False):
     """Normalise to unit area and overlay histograms. Returns clones (keep-alive)."""
     canvas.Clear()
+    canvas.SetTopMargin(0.08)
     canvas.SetLogy(1 if logy else 0)
 
     normed = []
@@ -98,13 +116,13 @@ h_nhits = {}   # hits per cluster (uses hbhe_rechit_clusterIndex)
 for label in LABELS:
     h_ncl[label]   = ROOT.TH1F(f"h_ncl_{label}",
         f"{label} — HCAL clusters/event;N_{{clusters}};Entries",
-        60, 0, 60)
+        30, 0, 30)
     h_etot[label]  = ROOT.TH1F(f"h_etot_{label}",
         f"{label} — HCAL total cluster energy/event;#SigmaE [GeV];Entries",
-        100, 0, 500)
+        50, 0, 150)
     h_nhits[label] = ROOT.TH1F(f"h_nhits_{label}",
         f"{label} — HBHE hits per HCAL cluster;N_{{hits}};Entries",
-        30, 0, 30)
+        50, 0, 50)
 
 # ── fill histograms ───────────────────────────────────────────────────────────
 
@@ -144,32 +162,27 @@ active = [l for l in LABELS if l in files]
 
 kept = []  # keep normalised hists and legends alive for the duration of printing
 
-canvas.cd()
-latex = ROOT.TLatex()
-latex.SetNDC()
-latex.SetTextSize(0.04)
-
 n1, l1 = draw_overlay(canvas,
     [h_ncl[l] for l in active], active,
     "N_{clusters} per event")
-latex.DrawLatex(0.13, 0.93, "particleFlowClusterHCAL")
+kept += [n1, l1, draw_cms_label()]
+canvas.Update()
 canvas.Print(args.pdf)
-kept += [n1, l1]
 
 n2, l2 = draw_overlay(canvas,
     [h_etot[l] for l in active], active,
     "#SigmaE per event [GeV]")
-latex.DrawLatex(0.13, 0.93, "particleFlowClusterHCAL")
+kept += [n2, l2, draw_cms_label()]
+canvas.Update()
 canvas.Print(args.pdf)
-kept += [n2, l2]
 
 n3, l3 = draw_overlay(canvas,
     [h_nhits[l] for l in active], active,
     "N_{HBHE hits} per cluster",
     logy=True)
-latex.DrawLatex(0.13, 0.93, "particleFlowClusterHCAL")
+kept += [n3, l3, draw_cms_label()]
+canvas.Update()
 canvas.Print(args.pdf)
-kept += [n3, l3]
 
 canvas.Print(f"{args.pdf}]")
 

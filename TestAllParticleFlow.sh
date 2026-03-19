@@ -10,7 +10,6 @@ echo " "
 cd ..
 cmsenv
 cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
-cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterProducer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterProducer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc 
 cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
@@ -26,7 +25,6 @@ echo "-----------------------------------"
 echo " "
 cd ..
 cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
-cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterProducer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterProducer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc 
 cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
@@ -42,7 +40,6 @@ echo "-----------------------------------"
 echo " "
 cd ..
 cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
-cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
 echo "Note: only timing cut on seeds, not on all cells, so only the clusterizer and cluster producer are modified"
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterProducer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterProducer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_seedTiming.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc 
@@ -75,10 +72,12 @@ echo "-----------------------------------"
 echo " "
 cd ..
 cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc 
-cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py 
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterProducer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterProducer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc 
 cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
 scram b -j 8
+echo " "
+echo "-----------------------------------"
 echo "Reverted to standard Particle Flow configuration"
 echo "Done!"
+echo "-----------------------------------"

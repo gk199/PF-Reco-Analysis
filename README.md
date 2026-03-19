@@ -39,7 +39,6 @@ The timing algorithm also places a "similar in time" constraint in the gathering
 
 Option 1 (`timing`): cell level timing cut vs global highest energy seed:
 ```
-cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py
 cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterProducer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterProducer.cc
@@ -71,7 +70,6 @@ cd PF-Reco-Analysis
 
 Reverting back to the original ones:
 ```
-cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHBHE_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHBHE_cfi.py
 cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterProducer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterProducer.cc
@@ -120,7 +118,7 @@ cmsDriver.py MyPFStudy_ReReco \
     --era Run3 --scenario pp --filein root://cms-xrd-global.cern.ch//store/data/Run2025E/Muon0/RAW-RECO/MUOJME-PromptReco-v1/000/395/982/00000/01c7900e-0585-4df0-8f2e-23ba45358ed8.root \
     --fileout file:pf_only_reReco.root \
     --eventcontent RECO --datatier RECO --process ReRECO \
-    --customise_commands="process.RECOoutput = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reReco.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep *_horeco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*'))" \
+    --customise_commands="process.RECOoutput = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reReco.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep *_horeco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*', 'keep HcalUMNioDigi_hcalDigis_*_*'))" \
     --no_exec -n 100
 ```
 
@@ -132,7 +130,7 @@ cmsDriver.py MyPFStudy_ReRecoAOD \
     --era Run3 --scenario pp --filein root://cms-xrd-global.cern.ch//store/data/Run2025E/Muon0/RAW-RECO/MUOJME-PromptReco-v1/000/395/982/00000/01c7900e-0585-4df0-8f2e-23ba45358ed8.root \
     --fileout file:pf_only_reRecoAOD.root \
     --eventcontent AOD --datatier AOD --process ReRECOtoAOD \
-    --customise_commands="process.AODoutput = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reRecoAOD.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep *_horeco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*'))" \
+    --customise_commands="process.AODoutput = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reRecoAOD.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep *_horeco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*', 'keep HcalUMNioDigi_hcalDigis_*_*'))" \
     --no_exec -n 100
 ```
 And saving all the trigger information:
@@ -142,7 +140,7 @@ cmsDriver.py MyPFStudy_ReRecoAODfull \
     --step RAW2DIGI,L1Reco,RECO --geometry DB \
     --era Run3 --scenario pp --filein root://cms-xrd-global.cern.ch//store/data/Run2025E/Muon0/RAW-RECO/MUOJME-PromptReco-v1/000/395/982/00000/01c7900e-0585-4df0-8f2e-23ba45358ed8.root --fileout file:pf_only_reRecoAODfull.root \
     --eventcontent AOD --datatier AOD --process ReRECOtoAOD \
-    --customise_commands="process.AODoutput.outputCommands.extend(['keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep *_horeco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*'])" \
+    --customise_commands="process.AODoutput.outputCommands.extend(['keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep *_horeco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*', 'keep HcalUMNioDigi_hcalDigis_*_*'])" \
     --no_exec -n 100 
 ```
 
@@ -162,6 +160,8 @@ The clusters and rechits are looped over in `PFObjectsNtupler.cc`. Edit this to 
 
 Note that the Global Tag in `runPFObjectsNtupler_cfg.py` may need to be adjusted between data and MC. 
 
+Note: when you run the ntupler on the re-reco output (not directly on RAW), the process label in the input tag will need to match. If needed, you can override taguMNio in `runPFObjectsNtupler_cfg.py` by adding e.g. `taguMNio = cms.untracked.InputTag("hcalDigis", "", "ReRECO")` to the pfObjectsNtupler PSet.
+
 # Plotting
 ```
 python3 Plotting/plot_pfObjects.py
@@ -174,6 +174,10 @@ python3 Plotting/compare_hcal_clusters.py --inputdir . --output hcal_comparison.
 ```
 This will plot the number of HCAL clusters per event, total HCAL cluster energy, and HBHE hits per cluster.
 
+With the bash script:
+```
+./PlotAllParticleFlow.sh
+```
 # Event Display
 The event display is done from the `pfObjectsNtuple.root`.
 ```
