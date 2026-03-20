@@ -1,32 +1,3 @@
-// Option 3: Seed-level timing cut using the starting cluster's seed as the
-// fixed reference.  Simpler alternative to Option 2.
-//
-// No pre-pass is needed.  The seed time of input[i] — the first unprocessed
-// cluster in this group's iteration order — is read directly and used as the
-// fixed reference for all subsequent seed timing checks.  A depth cluster is
-// absorbed only if its seed is within _timeThreshold of this reference; if the
-// seed fails the entire depth cluster is excluded.
-//
-// Caveat: input[i] is not strictly guaranteed to be the depth-1 cluster.  The
-// input ordering depends on the order Basic2DGenericTopoClusterizer built its
-// clusters (sorted by seed energy within each depth, but not sorted by depth
-// across the whole collection).  In practice for isolated showers input[i] is
-// typically the cluster at or near the shallowest active depth, but this is not
-// enforced.  Use Option 2 (PFMultiDepthClusterizer_seedTiming.cc.edit) if a
-// strictly defined global reference is required.
-//
-// Additions over the original PFMultiDepthClusterizer.cc:
-//   - _useTiming, _timeThreshold members and constructor parameters
-//   - two lines in buildClusters to read refSeedTime from input[i]
-//   - refSeedTime threaded through expandCluster and absorbCluster signatures
-//   - seed timing check at the top of absorbCluster
-//
-// To use: copy this file to
-//   RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc
-// replacing the original, and rebuild.  Use together with the standard
-//   Basic2DGenericTopoClusterizer.cc (no per-cell timing cut)
-// and particleFlowClusterHCAL_depth1Timing_cfi.py.
-
 #include "DataFormats/Math/interface/deltaPhi.h"
 #include "DataFormats/Math/interface/deltaR.h"
 #include "DataFormats/ParticleFlowReco/interface/PFRecHit.h"
@@ -63,9 +34,6 @@ private:
   std::unique_ptr<PFCPositionCalculatorBase> _allCellsPosCalc;
   double nSigmaEta_;
   double nSigmaPhi_;
-  // timing settings
-  const bool _useTiming;
-  const double _timeThreshold;
 
   class ClusterLink {
   public:
@@ -99,25 +67,19 @@ private:
                                 const std::vector<double>&);
   std::vector<ClusterLink> prune(std::vector<ClusterLink>&, std::vector<bool>& linkedClusters);
 
-  // rejected[idx] is set true for any depth cluster idx that absorbCluster rejects.
   void expandCluster(reco::PFCluster&,
                      unsigned int point,
                      std::vector<bool>& mask,
                      const reco::PFClusterCollection&,
-                     const std::vector<ClusterLink>& links,
-                     double refSeedTime,
-                     std::vector<bool>& rejected);
+                     const std::vector<ClusterLink>& links);
 
-  // Returns true if the cluster was absorbed, false if rejected by timing.
-  bool absorbCluster(reco::PFCluster& main, const reco::PFCluster& added, double refSeedTime);
+  void absorbCluster(reco::PFCluster&, const reco::PFCluster&);
 };
 
 DEFINE_EDM_PLUGIN(PFClusterBuilderFactory, PFMultiDepthClusterizer, "PFMultiDepthClusterizer");
 
 PFMultiDepthClusterizer::PFMultiDepthClusterizer(const edm::ParameterSet& conf, edm::ConsumesCollector& cc)
-    : PFClusterBuilderBase(conf, cc),
-      _useTiming(conf.getUntrackedParameter<bool>("useTiming", true)),
-      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 5.0)) {
+    : PFClusterBuilderBase(conf, cc) {
   const auto& acConf = conf.getParameterSet("allCellsPositionCalc");
   if (!acConf.empty()) {
     const std::string& algoac = acConf.getParameter<std::string>("algoName");
@@ -136,88 +98,56 @@ void PFMultiDepthClusterizer::buildClusters(const reco::PFClusterCollection& inp
   std::vector<double> etaRMS2(input.size(), 0.0);
   std::vector<double> phiRMS2(input.size(), 0.0);
 
+  //We need to sort the clusters for smaller to larger depth
+  //  for (unsigned int i=0;i<input.size();++i)
+  //   printf(" cluster%f %f \n",input[i].depth(),input[i].energy());
+
+  //calculate cluster shapes
   calculateShowerShapes(input, etaRMS2, phiRMS2);
 
+  //link
   auto&& links = link(input, etaRMS2, phiRMS2);
+  //  for (const auto& link: links)
+  //    printf("link %d %d %f %f\n",link.from(),link.to(),link.dR(),link.dZ());
 
   std::vector<bool> mask(input.size(), false);
   std::vector<bool> linked(input.size(), false);
-  std::vector<bool> rejected(input.size(), false);
 
+  //prune
   auto&& prunedLinks = prune(links, linked);
 
+  //printf("Pruned links\n")
+  //  for (const auto& link: prunedLinks)
+  //  printf("link %d %d %f %f\n",link.from(),link.to(),link.dR(),link.dZ());
+
+  //now we need to build clusters
   for (unsigned int i = 0; i < input.size(); ++i) {
+    //if not masked
     if (mask[i])
       continue;
+    //if not linked just spit it out
     if (!linked[i]) {
       output.push_back(input[i]);
+      //      printf("Added single cluster with energy =%f \n",input[i].energy());
       mask[i] = true;
       continue;
     }
 
-    // Use input[i]'s seed time as the fixed reference for all timing checks
-    // in this group.  No pre-pass needed.
-    double refSeedTime = -999.0;
-    for (const auto& frac : input[i].recHitFractions())
-      if (frac.recHitRef()->detId() == input[i].seed()) {
-        refSeedTime = frac.recHitRef()->time();
-        break;
-      }
-
+    //now business: if  linked and not  masked gather clusters
     reco::PFCluster cluster = input[i];
     mask[i] = true;
-    expandCluster(cluster, i, mask, input, prunedLinks, refSeedTime, rejected);
+    expandCluster(cluster, i, mask, input, prunedLinks);
     _allCellsPosCalc->calculateAndSetPosition(cluster, hcalCuts);
     output.push_back(cluster);
-  }
-
-  // Iterative OOT passes: each pass ungroups clusters rejected in the previous
-  // pass and re-clusters them using their own seed time as the timing reference.
-  // Links are rebuilt from the original (pre-pruning) set filtered to only the
-  // currently unmasked clusters, so OOT depth clusters that previously lost a
-  // link to an IT cluster can now correctly find each other.
-  while (true) {
-    bool anyOOT = false;
-    for (unsigned int i = 0; i < input.size(); ++i)
-      if (rejected[i]) { mask[i] = false; anyOOT = true; }
-    if (!anyOOT) break;
-
-    std::fill(rejected.begin(), rejected.end(), false);
-
-    // Rebuild spatial links among only the unmasked (OOT) clusters.
-    std::vector<ClusterLink> ootLinks;
-    for (const auto& lnk : links)
-      if (!mask[lnk.from()] && !mask[lnk.to()])
-        ootLinks.push_back(lnk);
-
-    std::vector<bool> ootLinked(input.size(), false);
-    auto&& ootPrunedLinks = prune(ootLinks, ootLinked);
-
-    for (unsigned int i = 0; i < input.size(); ++i) {
-      if (mask[i]) continue;
-      if (!ootLinked[i]) {
-        output.push_back(input[i]);
-        mask[i] = true;
-        continue;
-      }
-      double refSeedTimeOOT = -999.0;
-      for (const auto& frac : input[i].recHitFractions())
-        if (frac.recHitRef()->detId() == input[i].seed()) {
-          refSeedTimeOOT = frac.recHitRef()->time();
-          break;
-        }
-      reco::PFCluster cluster = input[i];
-      mask[i] = true;
-      expandCluster(cluster, i, mask, input, ootPrunedLinks, refSeedTimeOOT, rejected);
-      _allCellsPosCalc->calculateAndSetPosition(cluster, hcalCuts);
-      output.push_back(cluster);
-    }
+    //    printf("Added linked cluster with energy =%f\n",cluster.energy());
   }
 }
 
 void PFMultiDepthClusterizer::calculateShowerShapes(const reco::PFClusterCollection& clusters,
                                                     std::vector<double>& etaRMS2,
                                                     std::vector<double>& phiRMS2) {
+  //shower shapes. here do not use the fractions
+
   for (unsigned int i = 0; i < clusters.size(); ++i) {
     const reco::PFCluster& cluster = clusters[i];
     double etaSum = 0.0;
@@ -229,6 +159,7 @@ void PFMultiDepthClusterizer::calculateShowerShapes(const reco::PFClusterCollect
       etaSum += (frac.fraction() * h.energy()) * std::abs(rep.eta() - crep.eta());
       phiSum += (frac.fraction() * h.energy()) * std::abs(deltaPhi(rep.phi(), crep.phi()));
     }
+    //protection for single line : assign ~ tower
     etaRMS2[i] = std::max(etaSum / cluster.energy(), 0.1);
     etaRMS2[i] *= etaRMS2[i];
     phiRMS2[i] = std::max(phiSum / cluster.energy(), 0.1);
@@ -239,6 +170,7 @@ void PFMultiDepthClusterizer::calculateShowerShapes(const reco::PFClusterCollect
 std::vector<PFMultiDepthClusterizer::ClusterLink> PFMultiDepthClusterizer::link(
     const reco::PFClusterCollection& clusters, const std::vector<double>& etaRMS2, const std::vector<double>& phiRMS2) {
   std::vector<ClusterLink> links;
+  //loop on all pairs
   for (unsigned int i = 0; i < clusters.size(); ++i)
     for (unsigned int j = 0; j < clusters.size(); ++j) {
       if (i == j)
@@ -247,8 +179,10 @@ std::vector<PFMultiDepthClusterizer::ClusterLink> PFMultiDepthClusterizer::link(
       const reco::PFCluster& cluster1 = clusters[i];
       const reco::PFCluster& cluster2 = clusters[j];
 
+      // PFCluster depth stored as double but HCAL layer clusters have integral depths only
       auto dz = (static_cast<int>(cluster2.depth()) - static_cast<int>(cluster1.depth()));
 
+      //Do not link at the same layer and only link inside out!
       if (dz <= 0)
         continue;
 
@@ -259,6 +193,8 @@ std::vector<PFMultiDepthClusterizer::ClusterLink> PFMultiDepthClusterizer::link(
       deta = deta * deta / (etaRMS2[i] + etaRMS2[j]);
       auto dphi = deltaPhi(crep1.phi(), crep2.phi());
       dphi = dphi * dphi / (phiRMS2[i] + phiRMS2[j]);
+
+      //      printf("Testing Link %d -> %d (%f %f %f %f ) \n",i,j,deta,dphi,cluster1.position().Eta()-cluster2.position().Eta(),deltaPhi(cluster1.position().Phi(),cluster2.position().Phi()));
 
       if ((deta < nSigmaEta_) & (dphi < nSigmaPhi_))
         links.push_back(ClusterLink(i, j, deta + dphi, std::abs(dz), cluster1.energy() + cluster2.energy()));
@@ -284,17 +220,19 @@ std::vector<PFMultiDepthClusterizer::ClusterLink> PFMultiDepthClusterizer::prune
       const ClusterLink& link1 = links[i];
       const ClusterLink& link2 = links[j];
 
-      if (link1.to() == link2.to()) {
+      if (link1.to() == link2.to()) {  //found two links going to the same spot,kill one
+        //first prefer nearby layers
         if (link1.dZ() < link2.dZ()) {
           mask[j] = true;
         } else if (link1.dZ() > link2.dZ()) {
           mask[i] = true;
-        } else {
+        } else {  //if same layer-pick based on transverse compatibility
           if (link1.dR() < link2.dR()) {
             mask[j] = true;
           } else if (link1.dR() > link2.dR()) {
             mask[i] = true;
           } else {
+            //same distance as well -> can happen !!!!! Pick the highest SUME
             if (link1.energy() < link2.energy())
               mask[i] = true;
             else
@@ -316,80 +254,56 @@ std::vector<PFMultiDepthClusterizer::ClusterLink> PFMultiDepthClusterizer::prune
   return goodLinks;
 }
 
-bool PFMultiDepthClusterizer::absorbCluster(reco::PFCluster& main,
-                                            const reco::PFCluster& added,
-                                            double refSeedTime) {
-  // Seed timing cut against the fixed reference from input[i].
-  // If the added cluster's seed falls outside the time window, reject the
-  // entire depth cluster — no cells are added.
-  if (_useTiming && refSeedTime > -998.0) {
-    double addedSeedTime = -999.0;
-    for (const auto& frac : added.recHitFractions())
-      if (frac.recHitRef()->detId() == added.seed()) {
-        addedSeedTime = frac.recHitRef()->time();
-        break;
-      }
-    if (addedSeedTime > -998.0 && std::abs(addedSeedTime - refSeedTime) >= _timeThreshold)
-      return false;  // reject entire depth cluster
-  }
-
+void PFMultiDepthClusterizer::absorbCluster(reco::PFCluster& main, const reco::PFCluster& added) {
   double e1 = 0.0;
   double e2 = 0.0;
 
+  //find seeds
   for (const auto& fraction : main.recHitFractions())
-    if (fraction.recHitRef()->detId() == main.seed())
+    if (fraction.recHitRef()->detId() == main.seed()) {
       e1 = fraction.recHitRef()->energy();
+    }
 
   for (const auto& fraction : added.recHitFractions()) {
     main.addRecHitFraction(fraction);
-    if (fraction.recHitRef()->detId() == added.seed())
+    if (fraction.recHitRef()->detId() == added.seed()) {
       e2 = fraction.recHitRef()->energy();
+    }
   }
   if (e2 > e1)
     main.setSeed(added.seed());
-  return true;
 }
 
 void PFMultiDepthClusterizer::expandCluster(reco::PFCluster& cluster,
                                             unsigned int point,
                                             std::vector<bool>& mask,
                                             const reco::PFClusterCollection& clusters,
-                                            const std::vector<ClusterLink>& links,
-                                            double refSeedTime,
-                                            std::vector<bool>& rejected) {
+                                            const std::vector<ClusterLink>& links) {
   for (const auto& link : links) {
     if (link.from() == point) {
+      //found link that starts from this guy if not masked absorb
       if (!mask[link.from()]) {
-        if (!absorbCluster(cluster, clusters[link.from()], refSeedTime))
-          rejected[link.from()] = true;
+        absorbCluster(cluster, clusters[link.from()]);
         mask[link.from()] = true;
       }
 
       if (!mask[link.to()]) {
-        if (absorbCluster(cluster, clusters[link.to()], refSeedTime)) {
-          mask[link.to()] = true;
-          expandCluster(cluster, link.to(), mask, clusters, links, refSeedTime, rejected);
-        } else {
-          rejected[link.to()] = true;
-          mask[link.to()] = true;
-        }
+        absorbCluster(cluster, clusters[link.to()]);
+        mask[link.to()] = true;
+        expandCluster(cluster, link.to(), mask, clusters, links);
       }
     }
     if (link.to() == point) {
+      //found link that starts from this guy if not masked absorb
       if (!mask[link.to()]) {
-        if (!absorbCluster(cluster, clusters[link.to()], refSeedTime))
-          rejected[link.to()] = true;
+        absorbCluster(cluster, clusters[link.to()]);
         mask[link.to()] = true;
       }
 
       if (!mask[link.from()]) {
-        if (absorbCluster(cluster, clusters[link.from()], refSeedTime)) {
-          mask[link.from()] = true;
-          expandCluster(cluster, link.from(), mask, clusters, links, refSeedTime, rejected);
-        } else {
-          rejected[link.from()] = true;
-          mask[link.from()] = true;
-        }
+        absorbCluster(cluster, clusters[link.from()]);
+        mask[link.from()] = true;
+        expandCluster(cluster, link.from(), mask, clusters, links);
       }
     }
   }

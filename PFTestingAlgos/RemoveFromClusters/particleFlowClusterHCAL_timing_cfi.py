@@ -1,13 +1,11 @@
-# Configuration for Option 2: timing cut only on seeds when linking depth clusters.
+# Configuration for Option 1: timing cut at both clustering stages.
 #
 # Use together with:
-#   Basic2DGenericTopoClusterizer.cc  (original, no per-cell timing cut)
-#   PFMultiDepthClusterizer_seedTiming.cc.edit  -> seed-to-seed timing at link stage
+#   Basic2DGenericTopoClusterizer_timing.cc.edit  -> per-depth per-cell timing
+#   PFMultiDepthClusterizer_timing.cc.edit        -> cross-depth cell timing
 #
-# Two per-depth clusters are only linked into a stacked cluster if their seeds
-# are within timeThreshold (5 ns) of each other.  Individual cells within an
-# accepted depth cluster are all included regardless of their timing.
-# Copy this file to:
+# All rechits in the final stacked cluster must be within timeThreshold (5 ns)
+# of the main seed time.  Copy this file to:
 #   RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py
 
 import FWCore.ParameterSet.Config as cms
@@ -26,9 +24,9 @@ particleFlowClusterHCAL = cms.EDProducer('PFMultiDepthClusterProducer',
            algoName = cms.string("PFMultiDepthClusterizer"),
            nSigmaEta = cms.double(2.),
            nSigmaPhi = cms.double(2.),
-           # timing parameters: gate depth-cluster linking on seed time compatibility
+           # timing parameters: filter cells in absorbed depth clusters
            useTiming = cms.untracked.bool(True),
-           timeThreshold = cms.untracked.double(5.0),  # ns # PFTesting - change this
+           timeThreshold = cms.untracked.double(0.0),  # ns # PFTesting - change this
            #pf clustering parameters
            minFractionToKeep = cms.double(1e-7),
            allCellsPositionCalc = cms.PSet(

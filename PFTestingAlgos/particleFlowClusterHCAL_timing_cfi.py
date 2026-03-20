@@ -26,7 +26,7 @@ particleFlowClusterHCAL = cms.EDProducer('PFMultiDepthClusterProducer',
            nSigmaPhi = cms.double(2.),
            # timing parameters: filter cells in absorbed depth clusters
            useTiming = cms.untracked.bool(True),
-           timeThreshold = cms.untracked.double(5.0),  # ns
+           timeThreshold = cms.untracked.double(5.0),  # ns # PFTesting - change this
            #pf clustering parameters
            minFractionToKeep = cms.double(1e-7),
            allCellsPositionCalc = cms.PSet(

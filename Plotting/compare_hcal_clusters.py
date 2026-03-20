@@ -65,18 +65,23 @@ def make_legend(hists, labels):
 def draw_cms_label():
     """Draw the standard CMS Simulation label in the top margin."""
     cms = ROOT.TLatex()
-    cms.SetTextFont(42)
-    cms.SetTextAlign(11)
+    cms.SetNDC()
     cms.SetTextSize(0.04)
-    cms.DrawLatexNDC(0.12, 0.935, "#bf{CMS}")
-    # cms.DrawLatexNDC(0.12, 0.935, "{#bf{CMS} #it{Simulation}}")
+    cms.DrawLatex(0.12, 0.935, "CMS")
+
+    sim = ROOT.TLatex()
+    sim.SetNDC()
+    # sim.SetTextFont(42) 
+    sim.SetTextSize(0.035)
+    # sim.DrawLatex(0.19, 0.935, "#it{Simulation}")
+    sim.DrawLatex(0.19, 0.935, "#bf{Simulation}")
 
     coll = ROOT.TLatex()
     coll.SetTextFont(42)
     coll.SetTextAlign(31)
     coll.SetTextSize(0.035)
     coll.DrawLatexNDC(0.90, 0.935, "particleFlowClusterHCAL")
-    return cms, coll  # keep alive
+    return cms, sim, coll  # keep alive
 
 
 def draw_overlay(canvas, hists, labels, xtitle, logy=False):

@@ -100,14 +100,17 @@ private:
   // _timeThreshold of refSeedTime (when timing is enabled).  If the seed fails,
   // the entire depth cluster is skipped.  All cells of an accepted cluster are
   // included without further per-cell timing checks.
-  void absorbCluster(reco::PFCluster& main, const reco::PFCluster& added, double refSeedTime);
+  // Returns true if the cluster was absorbed, false if rejected by timing.
+  bool absorbCluster(reco::PFCluster& main, const reco::PFCluster& added, double refSeedTime);
 
+  // rejected[idx] is set true for any depth cluster idx that absorbCluster rejects.
   void expandCluster(reco::PFCluster&,
                      unsigned int point,
                      std::vector<bool>& mask,
                      const reco::PFClusterCollection&,
                      const std::vector<ClusterLink>& links,
-                     double refSeedTime);
+                     double refSeedTime,
+                     std::vector<bool>& rejected);
 };
 
 DEFINE_EDM_PLUGIN(PFClusterBuilderFactory, PFMultiDepthClusterizer, "PFMultiDepthClusterizer");
@@ -140,6 +143,7 @@ void PFMultiDepthClusterizer::buildClusters(const reco::PFClusterCollection& inp
 
   std::vector<bool> mask(input.size(), false);
   std::vector<bool> linked(input.size(), false);
+  std::vector<bool> rejected(input.size(), false);
 
   auto&& prunedLinks = prune(links, linked);
 
@@ -176,9 +180,52 @@ void PFMultiDepthClusterizer::buildClusters(const reco::PFClusterCollection& inp
 
     reco::PFCluster cluster = input[i];
     mask[i] = true;
-    expandCluster(cluster, i, mask, input, prunedLinks, refSeedTime);
+    expandCluster(cluster, i, mask, input, prunedLinks, refSeedTime, rejected);
     _allCellsPosCalc->calculateAndSetPosition(cluster, hcalCuts);
     output.push_back(cluster);
+  }
+
+  // Iterative OOT passes: each pass ungroups clusters rejected in the previous
+  // pass and re-clusters them using their own seed time as the timing reference.
+  // Links are rebuilt from the original (pre-pruning) set filtered to only the
+  // currently unmasked clusters, so OOT depth clusters that previously lost a
+  // link to an IT cluster can now correctly find each other.
+  while (true) {
+    bool anyOOT = false;
+    for (unsigned int i = 0; i < input.size(); ++i)
+      if (rejected[i]) { mask[i] = false; anyOOT = true; }
+    if (!anyOOT) break;
+
+    std::fill(rejected.begin(), rejected.end(), false);
+
+    // Rebuild spatial links among only the unmasked (OOT) clusters.
+    std::vector<ClusterLink> ootLinks;
+    for (const auto& lnk : links)
+      if (!mask[lnk.from()] && !mask[lnk.to()])
+        ootLinks.push_back(lnk);
+
+    std::vector<bool> ootLinked(input.size(), false);
+    auto&& ootPrunedLinks = prune(ootLinks, ootLinked);
+
+    for (unsigned int i = 0; i < input.size(); ++i) {
+      if (mask[i]) continue;
+      if (!ootLinked[i]) {
+        output.push_back(input[i]);
+        mask[i] = true;
+        continue;
+      }
+      double refSeedTimeOOT = -999.0;
+      for (const auto& frac : input[i].recHitFractions())
+        if (frac.recHitRef()->detId() == input[i].seed()) {
+          refSeedTimeOOT = frac.recHitRef()->time();
+          break;
+        }
+      reco::PFCluster cluster = input[i];
+      mask[i] = true;
+      expandCluster(cluster, i, mask, input, ootPrunedLinks, refSeedTimeOOT, rejected);
+      _allCellsPosCalc->calculateAndSetPosition(cluster, hcalCuts);
+      output.push_back(cluster);
+    }
   }
 }
 
@@ -303,7 +350,7 @@ std::vector<PFMultiDepthClusterizer::ClusterLink> PFMultiDepthClusterizer::prune
   return goodLinks;
 }
 
-void PFMultiDepthClusterizer::absorbCluster(reco::PFCluster& main,
+bool PFMultiDepthClusterizer::absorbCluster(reco::PFCluster& main,
                                             const reco::PFCluster& added,
                                             double refSeedTime) {
   // Seed timing cut against the fixed global highest-energy seed time.
@@ -317,7 +364,7 @@ void PFMultiDepthClusterizer::absorbCluster(reco::PFCluster& main,
         break;
       }
     if (addedSeedTime > -998.0 && std::abs(addedSeedTime - refSeedTime) >= _timeThreshold)
-      return;  // reject entire depth cluster
+      return false;  // reject entire depth cluster
   }
 
   double e1 = 0.0;
@@ -334,6 +381,7 @@ void PFMultiDepthClusterizer::absorbCluster(reco::PFCluster& main,
   }
   if (e2 > e1)
     main.setSeed(added.seed());
+  return true;
 }
 
 void PFMultiDepthClusterizer::expandCluster(reco::PFCluster& cluster,
@@ -341,30 +389,41 @@ void PFMultiDepthClusterizer::expandCluster(reco::PFCluster& cluster,
                                             std::vector<bool>& mask,
                                             const reco::PFClusterCollection& clusters,
                                             const std::vector<ClusterLink>& links,
-                                            double refSeedTime) {
+                                            double refSeedTime,
+                                            std::vector<bool>& rejected) {
   for (const auto& link : links) {
     if (link.from() == point) {
       if (!mask[link.from()]) {
-        absorbCluster(cluster, clusters[link.from()], refSeedTime);
+        if (!absorbCluster(cluster, clusters[link.from()], refSeedTime))
+          rejected[link.from()] = true;
         mask[link.from()] = true;
       }
 
       if (!mask[link.to()]) {
-        absorbCluster(cluster, clusters[link.to()], refSeedTime);
-        mask[link.to()] = true;
-        expandCluster(cluster, link.to(), mask, clusters, links, refSeedTime);
+        if (absorbCluster(cluster, clusters[link.to()], refSeedTime)) {
+          mask[link.to()] = true;
+          expandCluster(cluster, link.to(), mask, clusters, links, refSeedTime, rejected);
+        } else {
+          rejected[link.to()] = true;
+          mask[link.to()] = true;
+        }
       }
     }
     if (link.to() == point) {
       if (!mask[link.to()]) {
-        absorbCluster(cluster, clusters[link.to()], refSeedTime);
+        if (!absorbCluster(cluster, clusters[link.to()], refSeedTime))
+          rejected[link.to()] = true;
         mask[link.to()] = true;
       }
 
       if (!mask[link.from()]) {
-        absorbCluster(cluster, clusters[link.from()], refSeedTime);
-        mask[link.from()] = true;
-        expandCluster(cluster, link.from(), mask, clusters, links, refSeedTime);
+        if (absorbCluster(cluster, clusters[link.from()], refSeedTime)) {
+          mask[link.from()] = true;
+          expandCluster(cluster, link.from(), mask, clusters, links, refSeedTime, rejected);
+        } else {
+          rejected[link.from()] = true;
+          mask[link.from()] = true;
+        }
       }
     }
   }
