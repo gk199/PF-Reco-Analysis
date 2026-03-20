@@ -7,3 +7,4 @@
 <use name="root"/>
 <use name="Geometry/CaloGeometry"/>
 <use name="Geometry/Records"/>
+<use name="DataFormats/HcalDigi"/>

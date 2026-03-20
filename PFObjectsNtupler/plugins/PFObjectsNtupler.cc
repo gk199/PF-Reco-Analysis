@@ -12,6 +12,7 @@
 #include "DataFormats/ParticleFlowReco/interface/PFBlock.h"
 #include "DataFormats/HcalRecHit/interface/HBHERecHit.h"
 #include "DataFormats/HcalDetId/interface/HcalDetId.h"
+#include "DataFormats/HcalDigi/interface/HcalUMNioDigi.h"
 
 #include "DataFormats/EcalRecHit/interface/EcalRecHitCollections.h" // ECAL rechits
 #include "DataFormats/EcalRecHit/interface/EcalRecHit.h"
@@ -45,6 +46,7 @@ private:
   edm::EDGetTokenT<EcalRecHitCollection> eeRechitsToken_;
   edm::EDGetTokenT<EcalRecHitCollection> esRechitsToken_;
   edm::EDGetTokenT<std::vector<reco::PFBlock>> pfBlocksToken_;
+  edm::EDGetTokenT<HcalUMNioDigi> uMNioToken_;
 
   void beginRun(const edm::Run&, const edm::EventSetup&);
 
@@ -67,6 +69,9 @@ private:
 
   // PF Blocks (just store number of elements for now)
   int num_pfBlocks_;
+
+  // uMNio
+  int laserType_;
 };
 
 PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
@@ -82,6 +87,7 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
   // hbheRechitsToken_ = consumes<std::vector<reco::PFRecHit>>(edm::InputTag("particleFlowRecHitHBHE", "Cleaned", "ReRECOtoAOD"));
   // hbheRechitsToken_ = consumes<std::vector<reco::PFRecHit>>(edm::InputTag("particleFlowRecHitHBHE", "", "ReRECO"));
   pfBlocksToken_ = consumes<std::vector<reco::PFBlock>>(iConfig.getParameter<edm::InputTag>("pfBlocks"));
+  uMNioToken_ = mayConsume<HcalUMNioDigi>(iConfig.getUntrackedParameter<edm::InputTag>("taguMNio", edm::InputTag("hcalDigis")));
 
   edm::Service<TFileService> fs;
   tree_ = fs->make<TTree>("pfTree", "PF objects");
@@ -116,6 +122,9 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
 
   // PF block info
   tree_->Branch("num_pfBlocks", &num_pfBlocks_);
+
+  // uMNio
+  tree_->Branch("laserType", &laserType_);
 }
 
 // Convert ieta to eta using HCAL mapping
@@ -170,6 +179,7 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup&)
   hcal_energy_.clear(); hcal_eta_.clear(); hcal_phi_.clear(); hcal_time_.clear(); hcal_depth_.clear();
   hbhe_rechit_energy_.clear(); hbhe_rechit_eta_.clear(); hbhe_rechit_phi_.clear(); hbhe_rechit_depth_.clear(); hbhe_rechit_time_.clear(); hbhe_rechit_clusterIndex_.clear();
   num_pfBlocks_ = 0;
+  laserType_ = -1000;
 
   // PF Candidates
   edm::Handle<std::vector<reco::PFCandidate>> pfCandidates;
@@ -254,6 +264,13 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup&)
   iEvent.getByToken(pfBlocksToken_, pfBlocks);
   if (pfBlocks.isValid()) {
     num_pfBlocks_ = pfBlocks->size();
+  }
+
+  // uMNio (laserType from HCAL uMNio digi; -1000 if not present)
+  edm::Handle<HcalUMNioDigi> cumnio;
+  iEvent.getByToken(uMNioToken_, cumnio);
+  if (cumnio.isValid()) {
+    laserType_ = cumnio->valueUserWord(1);
   }
 
   tree_->Fill();

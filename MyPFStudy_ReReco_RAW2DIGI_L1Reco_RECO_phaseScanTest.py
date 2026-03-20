@@ -29,7 +29,11 @@ process.maxEvents = cms.untracked.PSet(
 
 # Input source
 process.source = cms.Source("PoolSource",
-    fileNames = cms.untracked.vstring('root://cms-xrd-global.cern.ch//store/data/Run2025E/Muon0/RAW-RECO/MUOJME-PromptReco-v1/000/395/982/00000/01c7900e-0585-4df0-8f2e-23ba45358ed8.root'),
+    fileNames = cms.untracked.vstring('file:/eos/cms/store/group/dpg_hcal/comm_hcal/QIEPhaseScan2025/JetMET0_392175/0025a766-c04c-4bfc-aaf4-c80235be662e.root',
+                                      'file:/eos/cms/store/group/dpg_hcal/comm_hcal/QIEPhaseScan2025/JetMET0_392175/3ea38b68-6b98-478f-a902-8f1644203d12.root',
+                                      'file:/eos/cms/store/group/dpg_hcal/comm_hcal/QIEPhaseScan2025/JetMET0_392175/837aa7f9-2e57-4b4e-890f-e6108b26c8db.root',
+                                      'file:/eos/cms/store/group/dpg_hcal/comm_hcal/QIEPhaseScan2025/JetMET0_392175/bd56d3e8-f726-48fb-9e97-d159a35dbfc0.root'
+),
     secondaryFileNames = cms.untracked.vstring()
 )
 
@@ -106,7 +110,7 @@ associatePatAlgosToolsTask(process)
 
 # Customisation from command line
 
-process.RECOoutput = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reReco.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep *_horeco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*'))
+process.RECOoutput = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reReco.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep *_horeco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*', 'keep HcalUMNioDigi_hcalDigis_*_*'))
 #Have logErrorHarvester wait for the same EDProducers to finish as those providing data for the OutputModule
 from FWCore.Modules.logErrorHarvester_cff import customiseLogErrorHarvesterUsingOutputCommands
 process = customiseLogErrorHarvesterUsingOutputCommands(process)
