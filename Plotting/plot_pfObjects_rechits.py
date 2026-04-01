@@ -40,8 +40,8 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
     root_seed_rh_diff_eta = ROOT.TH1F("root_seed_rh_diff_eta", "Difference in Eta Between Highest Energy Rechit and Seed;Delta Eta;Entries", 25, -0.4, 0.4)
     root_seed_rh_diff_phi = ROOT.TH1F("root_seed_rh_diff_phi", "Difference in Phi Between Highest Energy Rechit and Seed;Delta Phi;Entries", 25, -0.4, 0.4)
     root_seed_rh_diff_depth = ROOT.TH1F("root_seed_rh_diff_depth", "Difference in Depth Between Highest Energy Rechit and Seed;Delta Depth;Entries", 20, -2, 2)
-    root_he_seed_rh_delta_time = ROOT.TH1F("root_he_seed_rh_delta_time", "Delta TDC between 'Seed' and other Rechits in HE;Delta TDC;Entries", 8, 0, 4)
-    root_hb_seed_rh_delta_time= ROOT.TH1F("root_hb_seed_rh_delta_time", "Delta TDC between 'Seed' and other Rechits in HB;Delta TDC;Entries", 64, 0, 64)
+    root_he_seed_rh_delta_time = ROOT.TH1F("root_he_seed_rh_delta_time", "Delta TDC between 'Seed' and other Rechits in HE;Delta TDC;Entries", 64, 0, 64)
+    root_hb_seed_rh_delta_time= ROOT.TH1F("root_hb_seed_rh_delta_time", "Delta TDC between 'Seed' and other Rechits in HB;Delta TDC;Entries", 4, 0, 4)
 
     #1) HBHE rechits
     # Note: maxenergy_tdc_percluster only includes clusters with at least 2 rechits

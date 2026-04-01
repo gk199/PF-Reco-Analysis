@@ -1,5 +1,6 @@
 import ROOT
 import math
+import numpy as np
 
 def delta_phi(phi1, phi2):
     dphi = phi1 - phi2
@@ -15,9 +16,22 @@ def delta_r(eta1, phi1, eta2, phi2):
     return math.sqrt(deta*deta + dphi*dphi)
 
 #file = ROOT.TFile.Open("SinglePi0E100_1000_n5000/pfObjectsNtuple_new.root")
-inputfile_list =["ttbar/pfObjectsNtuple_new.root", "SinglePiPt100_1000_n1000/pfObjectsNtuple_new.root", "SinglePi0E100_1000_n5000/pfObjectsNtuple_new.root"]
-outputfile_list = ["ttbar/ttbar_pfrh_notimecuts.root", "SinglePiPt100_1000_n1000/PiPt_pfrh_notimecuts.root", "SinglePi0E100_1000_n5000/Pi0E_pfrh_notimecuts.root"]
+#inputfile_list =["ttbar/pfObjectsNtuple_new.root", "SinglePiPt100_1000_n1000/pfObjectsNtuple_new.root", "SinglePi0E100_1000_n5000/pfObjectsNtuple_new.root"]
+#outputfile_list = ["ttbar/ttbar_pfrh_notimecuts.root", "SinglePiPt100_1000_n1000/PiPt_pfrh_notimecuts.root", "SinglePi0E100_1000_n5000/Pi0E_pfrh_notimecuts.root"]
+eos_path  = "/eos/user/c/chtong/Public/Rereco/"
+inputfile_list =[eos_path + "ttbar_rereco/pfObjectsNtuple_new.root", 
+                 eos_path + "SinglePiPt100_1000_n1000/pfObjectsNtuple_new.root", 
+                 eos_path + "SinglePi0E100_1000_n5000/pfObjectsNtuple_new.root",
+                 eos_path + "ttbar_rereco/pfObjectsNtuple_new_timing.root", 
+                 eos_path + "SinglePiPt100_1000_n1000/pfObjectsNtuple_new_timing.root", 
+                 eos_path + "SinglePi0E100_1000_n5000/pfObjectsNtuple_new_timing.root"]
 
+outputfile_list = [eos_path + "ttbar_rereco/ttbar_hcalrh_notimecuts.root", 
+                   eos_path + "SinglePiPt100_1000_n1000/PiPt_hcalrh_notimecuts.root", 
+                   eos_path + "SinglePi0E100_1000_n5000/Pi0E_hcalrh_notimecuts.root",
+                   eos_path + "ttbar_rereco/ttbar_hcalrh_notimecuts_timing.root", 
+                   eos_path + "SinglePiPt100_1000_n1000/PiPt_hcalrh_notimecuts_timing.root",
+                   eos_path + "SinglePi0E100_1000_n5000/Pi0E_hcalrh_notimecuts_timing.root"]
 for inputfile, outputfile in zip(inputfile_list, outputfile_list):
     # Load the ROOT file and TTree
 
@@ -87,6 +101,11 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
     root_avg_he_time_percluster_wide = ROOT.TH1F("root_avg_pfhe_time_percluster_wide", "Average Time per HE Cluster (PFrh, wide cone);Time;Entries", 50, -10, 10)
 
     tree.Print()
+    seedE_all = []
+    seedT_all = []
+    seedE_HB, seedT_HB = [], []
+    seedE_HE, seedT_HE = [], []
+
     # Loop over entries
     for event in tree:
 
@@ -117,6 +136,8 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
                 hbhe_pfrh_passed_percluster = 0
                 hbhe_pfrh_passed_percluster_wide = 0
                 hbhe_pfrh_passed_percluster_narrow = 0
+
+                hbhe_pfrh_passed_percluster_time = 0
 
                 total_hbhe_pfrh_energy_percluster = 0
                 hbhe_pfrh_energy_time_percluster_pairs = []
@@ -165,18 +186,23 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
 
                             dr = delta_r(rh_eta, rh_phi, cl_eta, cl_phi)
                             if dr <= 0.4:
-                                hbhe_pfrh_passed_percluster_wide += 1
-                                total_hbhe_time_percluster_wide += event.hbhe_pfrh_time[i]
+                                if event.hbhe_pfrh_time[i] != -999 and event.hbhe_pfrh_time[i] != 100.0:
+                                    hbhe_pfrh_passed_percluster_wide += 1
+                                    total_hbhe_time_percluster_wide += event.hbhe_pfrh_time[i]
+
                             if dr <= 0.2:
-                                hbhe_pfrh_passed_percluster_narrow += 1
-                                total_hbhe_time_percluster_narrow += event.hbhe_pfrh_time[i]
+                                if event.hbhe_pfrh_time[i] != -999 and event.hbhe_pfrh_time[i] != 100.0:
+                                    hbhe_pfrh_passed_percluster_narrow += 1
+                                    total_hbhe_time_percluster_narrow += event.hbhe_pfrh_time[i]
 
                             hbhe_pfrh_passed_percluster += 1
                             hbhe_pfrh_passed += 1
                             total_hbhe_pfrh_energy_percluster += event.hbhe_pfrh_energy[i]
-                            total_hbhe_time_percluster += event.hbhe_pfrh_time[i]
-                            
-                            hbhe_pfrh_energy_time_percluster_pairs.append((event.hbhe_pfrh_energy[i], event.hbhe_pfrh_time[i]))
+
+                            if event.hbhe_pfrh_time[i] != -999 and event.hbhe_pfrh_time[i] != 100.0:
+                                hbhe_pfrh_passed_percluster_time += event.hbhe_pfrh_time[i]
+                                total_hbhe_time_percluster += event.hbhe_pfrh_time[i]
+                                hbhe_pfrh_energy_time_percluster_pairs.append((event.hbhe_pfrh_energy[i], event.hbhe_pfrh_time[i]))
 
                             rh_list.append((event.hbhe_pfrh_energy[i],
                                         event.hbhe_pfrh_time[i],
@@ -204,6 +230,16 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
                     # pick the highest-energy PFRecHit in this cluster
                     pfrh_seed_idx = max(range(len(rh_list)), key=lambda j: rh_list[j][0])
                     pfrh_seed_energy, pfrh_seed_time, pfrh_seed_eta, pfrh_seed_phi, pfrh_seed_depth = rh_list[pfrh_seed_idx]
+                    seedE_all.append(pfrh_seed_energy)
+                    seedT_all.append(pfrh_seed_time)
+
+                    if abs(event.hcal_eta[cluster_idx]) < 1.26:
+                        seedE_HB.append(pfrh_seed_energy)
+                        seedT_HB.append(pfrh_seed_time)
+
+                    elif abs(event.hcal_eta[cluster_idx]) >= 1.26:
+                        seedE_HE.append(pfrh_seed_energy)
+                        seedT_HE.append(pfrh_seed_time)
 
                     # compare PFRecHit seed vs cluster seed
                     root_seed_pfrh_diff_depth.Fill(pfrh_seed_depth - seed_depth)
@@ -213,7 +249,7 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
                     # fill delta time for non-seed PFRecHits in the same cluster
                     # remove all invalid time values (-999) (in this section only!) and the seed itself from the delta time histogram
                     for j, (rh_energy, rh_time, rh_eta, rh_phi, rh_depth) in enumerate(rh_list):
-                        if j == pfrh_seed_idx or rh_time == -999:
+                        if j == pfrh_seed_idx or rh_time == -999 or rh_time == 100.0:
                             continue
                         root_hbhe_seed_pfrh_delta_time.Fill(rh_time - pfrh_seed_time)
 
@@ -233,7 +269,9 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
                     #if hbhe_pfrh_passed_percluster > 0 and total_hbhe_maxenergy_time_percluster > 0:
                     #Fill in avg number of pfrh, avg energy of pfrh, avg time per cluster                
                     root_avg_hbhe_energy_percluster.Fill(total_hbhe_pfrh_energy_percluster / hbhe_pfrh_passed_percluster)
-                    root_avg_hbhe_time_percluster.Fill(total_hbhe_time_percluster / hbhe_pfrh_passed_percluster) 
+                    
+                    if hbhe_pfrh_passed_percluster_time > 0:
+                        root_avg_hbhe_time_percluster.Fill(total_hbhe_time_percluster / hbhe_pfrh_passed_percluster_time) 
                     
                     if hbhe_pfrh_passed_percluster_wide > 0:
                         root_avg_hbhe_time_percluster_wide.Fill(total_hbhe_time_percluster_wide / hbhe_pfrh_passed_percluster_wide)
@@ -266,6 +304,8 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
             if event.hcal_energy[cluster_idx] > 30 and abs(event.hcal_eta[cluster_idx]) < 1.26:
                 # Define variables to accumulate per-cluster values for clusters that pass cuts
                 hb_pfrh_passed_percluster = 0
+                hb_pfrh_passed_percluster_time = 0
+
                 total_hb_pfrh_energy_percluster = 0
                 hb_pfrh_energy_time_percluster_pairs = []
                 total_hb_time_percluster = 0
@@ -297,18 +337,22 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
 
                             dr = delta_r(rh_eta, rh_phi, cl_eta, cl_phi)
                             if dr <= 0.4:
-                                hb_pfrh_passed_percluster_wide += 1
-                                total_hb_time_percluster_wide += event.hb_pfrh_time[i]
+                                if event.hb_pfrh_time[i] != -999 and event.hb_pfrh_time[i] != 100.0:
+                                    hb_pfrh_passed_percluster_wide += 1
+                                    total_hb_time_percluster_wide += event.hb_pfrh_time[i]
                             if dr <= 0.2:
-                                hb_pfrh_passed_percluster_narrow += 1
-                                total_hb_time_percluster_narrow += event.hb_pfrh_time[i]
+                                if event.hb_pfrh_time[i] != -999 and event.hb_pfrh_time[i] != 100.0:
+                                    hb_pfrh_passed_percluster_narrow += 1
+                                    total_hb_time_percluster_narrow += event.hb_pfrh_time[i]
 
 
                             hb_pfrh_passed_percluster += 1
                             hb_pfrh_passed += 1
                             total_hb_pfrh_energy_percluster += event.hb_pfrh_energy[i]
-                            total_hb_time_percluster += event.hb_pfrh_time[i]
-                            hb_pfrh_energy_time_percluster_pairs.append((event.hb_pfrh_energy[i], event.hb_pfrh_time[i]))
+                            if event.hb_pfrh_time[i] != -999 and event.hb_pfrh_time[i] != 100.0:
+                                hb_pfrh_passed_percluster_time += event.hb_pfrh_time[i]
+                                total_hb_time_percluster += event.hb_pfrh_time[i]
+                                hb_pfrh_energy_time_percluster_pairs.append((event.hb_pfrh_energy[i], event.hb_pfrh_time[i]))
                                 
                             #Fill per depth energy sums
                             if event.hb_pfrh_depth[i] == 1:
@@ -323,8 +367,10 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
                 root_number_hb_percluster.Fill(hb_pfrh_passed_percluster) 
                 if hb_pfrh_passed_percluster > 0:
                     #Fill in avg number of pfrh, avg energy of pfrh, avg time per cluster                
-                    root_avg_hb_energy_percluster.Fill(total_hb_pfrh_energy_percluster / hb_pfrh_passed_percluster) 
-                    root_avg_hb_time_percluster.Fill(total_hb_time_percluster / hb_pfrh_passed_percluster)
+                    root_avg_hb_energy_percluster.Fill(total_hb_pfrh_energy_percluster / hb_pfrh_passed_percluster)
+
+                    if hb_pfrh_passed_percluster_time > 0: 
+                        root_avg_hb_time_percluster.Fill(total_hb_time_percluster / hb_pfrh_passed_percluster_time)
 
                     if hb_pfrh_passed_percluster_wide > 0:
                         root_avg_hb_time_percluster_wide.Fill(total_hb_time_percluster_wide / hb_pfrh_passed_percluster_wide)
@@ -355,6 +401,7 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
             if event.hcal_energy[cluster_idx] > 30 and abs(event.hcal_eta[cluster_idx]) >= 1.26:
                 # Define variables to accumulate per-cluster values for clusters that pass cuts
                 he_pfrh_passed_percluster = 0
+                he_pfrh_passed_percluster_time = 0
                 total_he_pfrh_energy_percluster = 0
                 he_pfrh_energy_time_percluster_pairs = []
                 total_he_time_percluster = 0
@@ -390,6 +437,7 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
                             rh_phi = event.he_pfrh_phi[i] 
                             dr = delta_r(rh_eta, rh_phi, cl_eta, cl_phi)
                             if dr <= 0.4:
+                                
                                 he_pfrh_passed_percluster_wide += 1
                                 total_he_time_percluster_wide += event.he_pfrh_time[i]
                             if dr <= 0.2:   
@@ -399,8 +447,11 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
                             he_pfrh_passed_percluster += 1
                             he_pfrh_passed += 1
                             total_he_pfrh_energy_percluster += event.he_pfrh_energy[i]
-                            total_he_time_percluster += event.he_pfrh_time[i]
-                            he_pfrh_energy_time_percluster_pairs.append((event.he_pfrh_energy[i], event.he_pfrh_time[i]))
+
+                            if event.he_pfrh_time[i] != -999 and event.he_pfrh_time[i] != 100.0:
+                                he_pfrh_passed_percluster_time += event.he_pfrh_time[i]
+                                total_he_time_percluster += event.he_pfrh_time[i]
+                                he_pfrh_energy_time_percluster_pairs.append((event.he_pfrh_energy[i], event.he_pfrh_time[i]))
 
                             #Fill per depth energy sums
                             if event.he_pfrh_depth[i] == 1:
@@ -417,7 +468,8 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
                 if he_pfrh_passed_percluster > 0:
                     #Fill in avg number of pfrh, avg energy of pfrh, avg time per cluster                
                     root_avg_he_energy_percluster.Fill(total_he_pfrh_energy_percluster / he_pfrh_passed_percluster)
-                    root_avg_he_time_percluster.Fill(total_he_time_percluster / he_pfrh_passed_percluster) 
+                    if he_pfrh_passed_percluster_time > 0:
+                        root_avg_he_time_percluster.Fill(total_he_time_percluster / he_pfrh_passed_percluster_time)
 
                     if he_pfrh_passed_percluster_wide > 0:
                         root_avg_he_time_percluster_wide.Fill(total_he_time_percluster_wide / he_pfrh_passed_percluster_wide)
@@ -448,6 +500,15 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
         print(f"Number of HE pfrh passing cuts: {he_pfrh_passed}")
 
     # Save histograms
+    np.savez(
+        outputfile.replace(".root", "_scatter.npz"),
+        seedE_all=np.array(seedE_all, dtype=float),
+        seedT_all=np.array(seedT_all, dtype=float),
+        seedE_HB=np.array(seedE_HB, dtype=float),
+        seedT_HB=np.array(seedT_HB, dtype=float),
+        seedE_HE=np.array(seedE_HE, dtype=float),
+        seedT_HE=np.array(seedT_HE, dtype=float))  
+
     out.Write()
     out.Close()
 

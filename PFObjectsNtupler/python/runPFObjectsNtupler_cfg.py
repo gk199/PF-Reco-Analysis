@@ -12,18 +12,21 @@ process.maxEvents = cms.untracked.PSet(
 
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(
-        #'file:/afs/cern.ch/user/c/chtong/PF/CMSSW_15_0_6/src/PF-Reco-Analysis/ttbar/pf_only_reReco_MC_Sim_new.root'
-        #'file:/afs/cern.ch/user/c/chtong/PF/CMSSW_15_0_6/src/PF-Reco-Analysis/SinglePiPt100_1000_n1000/pf_only_reReco_MC_Sim_new.root'
-        'file:/afs/cern.ch/user/c/chtong/PF/CMSSW_15_0_6/src/PF-Reco-Analysis/SinglePi0E100_1000_n5000/pf_only_reReco_MC_Sim_new.root'
+        'file:/afs/cern.ch/user/c/chtong/PF/CMSSW_15_0_6/src/PF-Reco-Analysis/ttbar/pf_only_reReco_MC_Sim_new_timing.root'
+        #'file:/afs/cern.ch/user/c/chtong/PF/CMSSW_15_0_6/src/PF-Reco-Analysis/SinglePiPt100_1000_n1000/pf_only_reReco_MC_Sim_new_timing.root'
+        #'file:/afs/cern.ch/user/c/chtong/PF/CMSSW_15_0_6/src/PF-Reco-Analysis/SinglePi0E100_1000_n5000/pf_only_reReco_MC_Sim_new_timing.root'
         # 'file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/PF-Reco-Analysis/pf_only_reRecoAOD.root'
         # 'file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/PF-Reco-Analysis/pf_only_reRecoAODfull.root'
     )
 )
 
 process.TFileService = cms.Service("TFileService",
+    fileName = cms.string('/eos/user/c/chtong/Public/Rereco/ttbar_rereco/pfObjectsNtuple_new_timing.root')
+    #fileName = cms.string('/eos/user/c/chtong/Public/Rereco/SinglePiPt100_1000_n1000/pfObjectsNtuple_new_timing.root')                               
+    #fileName = cms.string('/eos/user/c/chtong/Public/Rereco/SinglePi0E100_1000_n5000/pfObjectsNtuple_new_timing.root')                              
     #fileName = cms.string('/afs/cern.ch/user/c/chtong/PF/CMSSW_15_0_6/src/PF-Reco-Analysis/ttbar/pfObjectsNtuple_new.root')
     #fileName = cms.string('/afs/cern.ch/user/c/chtong/PF/CMSSW_15_0_6/src/PF-Reco-Analysis/SinglePiPt100_1000_n1000/pfObjectsNtuple_new.root')
-    fileName = cms.string('/afs/cern.ch/user/c/chtong/PF/CMSSW_15_0_6/src/PF-Reco-Analysis/SinglePi0E100_1000_n5000/pfObjectsNtuple_new.root')
+    #fileName = cms.string('/afs/cern.ch/user/c/chtong/PF/CMSSW_15_0_6/src/PF-Reco-Analysis/SinglePi0E100_1000_n5000/pfObjectsNtuple_new.root')
 )
 
 process.pfObjectsNtupler = cms.EDAnalyzer("PFObjectsNtupler",

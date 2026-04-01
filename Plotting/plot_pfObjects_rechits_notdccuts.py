@@ -1,5 +1,6 @@
 import ROOT
 import math
+import numpy as np
 
 def delta_phi(phi1, phi2):
     dphi = phi1 - phi2
@@ -16,8 +17,22 @@ def delta_r(eta1, phi1, eta2, phi2):
 
 # Load the ROOT file and TTree
 #file = ROOT.TFile.Open("SinglePi0E100_1000_n5000/pfObjectsNtuple_new.root")
-inputfile_list =["ttbar/pfObjectsNtuple_new.root", "SinglePiPt100_1000_n1000/pfObjectsNtuple_new.root", "SinglePi0E100_1000_n5000/pfObjectsNtuple_new.root"]
-outputfile_list = ["ttbar/ttbar_hcalrh_notdccuts.root", "SinglePiPt100_1000_n1000/PiPt_hcalrh_notdccuts.root", "SinglePi0E100_1000_n5000/Pi0E_hcalrh_notdccuts.root"]
+
+eos_path  = "/eos/user/c/chtong/Public/Rereco/"
+inputfile_list =[eos_path + "ttbar_rereco/pfObjectsNtuple_new.root", 
+                 eos_path + "SinglePiPt100_1000_n1000/pfObjectsNtuple_new.root", 
+                 eos_path + "SinglePi0E100_1000_n5000/pfObjectsNtuple_new.root",
+                 eos_path + "ttbar_rereco/pfObjectsNtuple_new_timing.root", 
+                 eos_path + "SinglePiPt100_1000_n1000/pfObjectsNtuple_new_timing.root", 
+                 eos_path + "SinglePi0E100_1000_n5000/pfObjectsNtuple_new_timing.root"]
+
+outputfile_list = [eos_path + "ttbar_rereco/ttbar_hcalrh_notdccuts.root", 
+                   eos_path + "SinglePiPt100_1000_n1000/PiPt_hcalrh_notdccuts.root", 
+                   eos_path + "SinglePi0E100_1000_n5000/Pi0E_hcalrh_notdccuts.root",
+                   eos_path + "ttbar_rereco/ttbar_hcalrh_notdccuts_timing.root", 
+                   eos_path + "SinglePiPt100_1000_n1000/PiPt_hcalrh_notdccuts_timing.root",
+                   eos_path + "SinglePi0E100_1000_n5000/Pi0E_hcalrh_notdccuts_timing.root"]
+                   
 
 for inputfile, outputfile in zip(inputfile_list, outputfile_list):
 
@@ -41,8 +56,8 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
     root_seed_rh_diff_eta = ROOT.TH1F("root_seed_rh_diff_eta", "Difference in Eta Between Highest Energy Rechit and Seed;Delta Eta;Entries", 25, -0.4, 0.4)
     root_seed_rh_diff_phi = ROOT.TH1F("root_seed_rh_diff_phi", "Difference in Phi Between Highest Energy Rechit and Seed;Delta Phi;Entries", 25, -0.4, 0.4)
     root_seed_rh_diff_depth = ROOT.TH1F("root_seed_rh_diff_depth", "Difference in Depth Between Highest Energy Rechit and Seed;Delta Depth;Entries", 20, -2, 2)
-    root_he_seed_rh_delta_time = ROOT.TH1F("root_he_seed_rh_delta_time", "Delta TDC between 'Seed' and other Rechits in HE; Delta TDC;Entries", 8, 0, 4)
-    root_hb_seed_rh_delta_time= ROOT.TH1F("root_hb_seed_rh_delta_time", "Delta TDC between 'Seed' and other Rechits in HB; Delta TDC;Entries", 64, 0, 64)
+    root_he_seed_rh_delta_time = ROOT.TH1F("root_he_seed_rh_delta_time", "Delta TDC between 'Seed' and other Rechits in HE; Delta TDC;Entries", 64, 0, 64)
+    root_hb_seed_rh_delta_time= ROOT.TH1F("root_hb_seed_rh_delta_time", "Delta TDC between 'Seed' and other Rechits in HB; Delta TDC;Entries", 4, 0, 4)
 
     #1) HBHE rechits
     # Note: maxenergy_tdc_percluster only includes clusters with at least 2 rechits
@@ -87,6 +102,12 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
     root_avg_he_tdc_percluster_wide = ROOT.TH1F("root_avg_he_tdc_percluster_wide", "Average TDC per HE Cluster (wide cone);TDC;Entries", 64, 0, 64)
 
     tree.Print()
+
+    seedE_all = []
+    seedT_all = []
+    seedE_HB, seedT_HB = [], []
+    seedE_HE, seedT_HE = [], []
+
     # Loop over entries
     for event in tree:
 
@@ -188,6 +209,17 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
                     # pick the highest-energy PFRecHit in this cluster
                     rh_seed_idx = max(range(len(rh_list)), key=lambda j: rh_list[j][0])
                     rh_seed_energy, rh_seed_time, rh_seed_eta, rh_seed_phi, rh_seed_depth = rh_list[rh_seed_idx]
+
+                    seedE_all.append(rh_seed_energy)
+                    seedT_all.append(rh_seed_time)
+
+                    if abs(event.hcal_eta[cluster_idx]) < 1.26:
+                        seedE_HB.append(rh_seed_energy)
+                        seedT_HB.append(rh_seed_time)
+
+                    elif abs(event.hcal_eta[cluster_idx]) >= 1.26:
+                        seedE_HE.append(rh_seed_energy)
+                        seedT_HE.append(rh_seed_time)
 
                     # compare PFRecHit seed vs cluster seed
                     root_seed_rh_diff_depth.Fill(rh_seed_depth - seed_depth)
@@ -427,6 +459,15 @@ for inputfile, outputfile in zip(inputfile_list, outputfile_list):
         print(f"Number of HBHE rechits passing cuts: {hbhe_rechit_passed}")
         print(f"Number of HB rechits passing cuts: {hb_rechit_passed}")
         print(f"Number of HE rechits passing cuts: {he_rechit_passed}")
+    
+    np.savez(
+    outputfile.replace(".root", "_scatter.npz"),
+    seedE_all=np.array(seedE_all, dtype=float),
+    seedT_all=np.array(seedT_all, dtype=float),
+    seedE_HB=np.array(seedE_HB, dtype=float),
+    seedT_HB=np.array(seedT_HB, dtype=float),
+    seedE_HE=np.array(seedE_HE, dtype=float),
+    seedT_HE=np.array(seedT_HE, dtype=float))   
 
     # Save histograms
     out.Write()
