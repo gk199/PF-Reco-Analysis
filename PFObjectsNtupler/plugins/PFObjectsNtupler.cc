@@ -12,6 +12,7 @@
 #include "DataFormats/ParticleFlowReco/interface/PFBlock.h"
 #include "DataFormats/HcalRecHit/interface/HBHERecHit.h"
 #include "DataFormats/HcalDetId/interface/HcalDetId.h"
+#include "DataFormats/HcalDigi/interface/HcalUMNioDigi.h"
 
 #include "DataFormats/EcalRecHit/interface/EcalRecHitCollections.h" // ECAL rechits
 #include "DataFormats/EcalRecHit/interface/EcalRecHit.h"
@@ -59,13 +60,16 @@ private:
   // Tokens
   edm::EDGetTokenT<std::vector<reco::PFCandidate>> pfCandidatesToken_;
   edm::EDGetTokenT<std::vector<reco::PFCluster>> ecalClustersToken_;
-  edm::EDGetTokenT<std::vector<reco::PFCluster>> hcalClustersToken_;
+  edm::EDGetTokenT<std::vector<reco::PFCluster>> hcalClustersToken_;     // particleFlowClusterHCAL  (post-depth-stacking)
+
   edm::EDGetTokenT<edm::SortedCollection<HBHERecHit>> hbheRechitsToken_;
   edm::EDGetTokenT<EcalRecHitCollection> ebRechitsToken_;
   edm::EDGetTokenT<EcalRecHitCollection> eeRechitsToken_;
   edm::EDGetTokenT<EcalRecHitCollection> esRechitsToken_;
   edm::EDGetTokenT<std::vector<reco::PFBlock>> pfBlocksToken_;
   edm::ESGetToken<CaloGeometry, CaloGeometryRecord> caloGeometryToken_;
+  edm::EDGetTokenT<HcalUMNioDigi> uMNioToken_;
+
 
   void beginRun(const edm::Run&, const edm::EventSetup&);
 
@@ -145,6 +149,9 @@ private:
 
   // PF Blocks (just store number of elements for now)
   int num_pfBlocks_;
+
+  // uMNio
+  int laserType_;
 };
 
 PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
@@ -162,7 +169,7 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
   // hbheRechitsToken_ = consumes<std::vector<reco::PFRecHit>>(edm::InputTag("particleFlowRecHitHBHE", "Cleaned", "ReRECOtoAOD"));
   // hbheRechitsToken_ = consumes<std::vector<reco::PFRecHit>>(edm::InputTag("particleFlowRecHitHBHE", "", "ReRECO"));
   pfBlocksToken_ = consumes<std::vector<reco::PFBlock>>(iConfig.getParameter<edm::InputTag>("pfBlocks"));
-
+  uMNioToken_ = mayConsume<HcalUMNioDigi>(iConfig.getUntrackedParameter<edm::InputTag>("taguMNio", edm::InputTag("hcalDigis")));
   edm::Service<TFileService> fs;
   tree_ = fs->make<TTree>("pfTree", "PF objects");
   
@@ -201,7 +208,8 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
   tree_->Branch("ee_rechit_time", &ee_rechit_time_);
   tree_->Branch("ee_rechit_clusterIdx", &ee_rechit_clusterIdx_); 
   tree_->Branch("ee_rechit_counts", &ee_rechit_counts_);
-  // HCAL cluster branches
+
+  // HCAL cluster branches (post-depth-stacking: particleFlowClusterHCAL)
   tree_->Branch("hcal_energy", &hcal_energy_);
   tree_->Branch("hcal_eta", &hcal_eta_);
   tree_->Branch("hcal_phi", &hcal_phi_);
@@ -285,6 +293,9 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
 
   // PF block info
   tree_->Branch("num_pfBlocks", &num_pfBlocks_);
+
+  // uMNio
+  tree_->Branch("laserType", &laserType_);
 }
 
 // Convert ieta to eta using HCAL mapping
@@ -424,7 +435,8 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
     pfrh_time.push_back(time);
   };
 
-
+  num_pfBlocks_ = 0;
+  laserType_ = -1000;
 
   // PF Candidates
   edm::Handle<std::vector<reco::PFCandidate>> pfCandidates;
@@ -745,8 +757,8 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
           continue;
         }
 
-        std::cout << "[PFObjectsNtupler] PFRecHit ref AVAILABLE. ProductID=" << pfrh_ref.id()
-                  << " key=" << pfrh_ref.key() << "\n";
+        // std::cout << "[PFObjectsNtupler] PFRecHit ref AVAILABLE. ProductID=" << pfrh_ref.id()
+        //           << " key=" << pfrh_ref.key() << "\n";
 
         const reco::PFRecHit& pfrh = *pfrh_ref;   // <-- keep ONLY THIS ONE
 
@@ -759,6 +771,21 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
         const int pfrh_ieta  = pfrh_hid.ieta();
         const int pfrh_iphi  = pfrh_hid.iphi();
         const auto pfrh_subdet = pfrh_hid.subdet();
+
+        // --- eta/phi from geometry (cell center) ---
+        float pfrh_eta = -999.f;
+        float pfrh_phi = -999.f;
+
+        const CaloCellGeometry* cell = caloGeom.getGeometry(pfrh_did);
+        if (cell) {
+          const GlobalPoint& pos = cell->getPosition();
+          pfrh_eta = pos.eta();
+          pfrh_phi = pos.phi();
+        } else {
+          // Fallback: compute eta/phi from ieta/iphi using HCAL mapping
+          pfrh_eta = hcalEtaFromIeta(pfrh_ieta);
+          pfrh_phi = hcalPhiFromIphi(pfrh_iphi);
+        }
 
         // ---------------- depth-dependent cut ----------------
         // choose the right per-depth threshold
@@ -783,7 +810,7 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
 
         const float pfrh_frac = hitRefAndFrac.fraction();
         // returns (eta, phi) from an HcalDetId
-        auto [pfrh_eta, pfrh_phi] = hcalEtaPhiFromDetId(pfrh_hid);
+        // auto [pfrh_eta, pfrh_phi] = hcalEtaPhiFromDetId(pfrh_hid);
 
         const bool isHB = (pfrh_subdet == HcalBarrel);
         const bool isHE = (pfrh_subdet == HcalEndcap);
@@ -875,6 +902,13 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
   iEvent.getByToken(pfBlocksToken_, pfBlocks);
   if (pfBlocks.isValid()) {
     num_pfBlocks_ = pfBlocks->size();
+  }
+  
+  // uMNio (laserType from HCAL uMNio digi; -1000 if not present)
+  edm::Handle<HcalUMNioDigi> cumnio;
+  iEvent.getByToken(uMNioToken_, cumnio);
+  if (cumnio.isValid()) {
+    laserType_ = cumnio->valueUserWord(1);
   }
 
   tree_->Fill();
