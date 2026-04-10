@@ -96,6 +96,33 @@ edmDumpEventContent pf_only_reReco_MC_Sim.root | grep EcalRecHits
 edmDumpEventContent pf_only_reReco_MC_Sim.root | grep particleFlow 
 ```
 
+An option is also prepared to run over the HCAL phase scan files, to save the uMNio word that encodes the phase delay. To run this:
+```
+cmsRun MyPFStudy_ReReco_RAW2DIGI_L1Reco_RECO_phaseScanFiles.py
+```
+
+## Condor Submission (HCAL phase scan files)
+1. Create `input_files.txt` of the phase scan files to run over. These are listed in the format: `file:/eos/cms/store/group/dpg_hcal/comm_hcal/QIEPhaseScan2025/JetMET*/*.root`.
+
+2. Test one job:
+```
+cd Condor
+bash submit_phaseScan.sh -t input_files.txt /your/output/dir
+```
+
+3. Submit all jobs:
+```
+cd Condor
+bash submit_phaseScan.sh input_files.txt /your/output/dir
+```
+
+4. Montor:
+```
+condor_q                          # see running/queued jobs
+condor_q -better-analyze <jobid>  # diagnose a held/failing job
+tail -f Condor/logs/condor.log    # watch the log
+```
+
 ## MC cmsDriver command
 For MC, a slightly different python config is needed (MC specific GlobalTag, MC flag, no pp scenario). The two config generations are given below. For MC, add `outputCommands = cms.untracked.vstring('drop *', 'keep *_g4SimHits_*_*', 'keep *_genParticles_*_*')` in `process.out` to keep the sim hits and gen particles (for Simon's truth matching studies). 
 ```
