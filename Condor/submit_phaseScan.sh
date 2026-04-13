@@ -72,6 +72,7 @@ log                   = ${LOG_DIR}/condor.log
 +JobFlavour           = "workday"
 request_memory        = 4000
 request_cpus          = 1
+request_disk          = 20000000
 should_transfer_files = NO
 queue inputFile from ${SUBMIT_LIST}
 EOF

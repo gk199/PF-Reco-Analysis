@@ -14,11 +14,14 @@ if [ -z "$INPUT_FILE" ] || [ -z "$JOB_INDEX" ] || [ -z "$OUTPUT_DIR" ]; then
     exit 1
 fi
 
-OUTPUT_FILENAME="${OUTPUT_DIR}/pf_only_reReco_phaseScan_job${JOB_INDEX}.root"
+OUTPUT_BASENAME="pf_only_reReco_phaseScan_job${JOB_INDEX}.root"
+# Write to local scratch first — EOS/AFS don't support direct ROOT file creation
+LOCAL_OUTPUT="${_CONDOR_SCRATCH_DIR:-/tmp}/${OUTPUT_BASENAME}"
+FINAL_OUTPUT="${OUTPUT_DIR}/${OUTPUT_BASENAME}"
 
 echo "=== Job ${JOB_INDEX} starting ==="
 echo "Input:      ${INPUT_FILE}"
-echo "Output:     ${OUTPUT_FILENAME}"
+echo "Output:     ${FINAL_OUTPUT}"
 echo "Hostname:   $(hostname)"
 echo "Date:       $(date)"
 
@@ -38,7 +41,7 @@ cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/PF-Reco-Analysis
 # -----------------------------------------------------------------------
 cmsRun MyPFStudy_ReReco_RAW2DIGI_L1Reco_RECO_phaseScan_condor.py \
     inputFiles="${INPUT_FILE}" \
-    outputFile="${OUTPUT_FILENAME}" \
+    outputFile="${LOCAL_OUTPUT}" \
     maxEvents=-1
 
 EXIT_CODE=$?
@@ -47,6 +50,19 @@ if [ ${EXIT_CODE} -ne 0 ]; then
     echo "ERROR: cmsRun failed with exit code ${EXIT_CODE}"
     exit ${EXIT_CODE}
 fi
+
+# -----------------------------------------------------------------------
+# Copy output from local scratch to final destination
+# -----------------------------------------------------------------------
+echo "Copying ${OUTPUT_BASENAME} to ${OUTPUT_DIR}/"
+xrdcp "${LOCAL_OUTPUT}" "${FINAL_OUTPUT}"
+
+if [ $? -ne 0 ]; then
+    echo "ERROR: Failed to copy output file"
+    exit 1
+fi
+
+rm -f "${LOCAL_OUTPUT}"
 
 echo "=== Job ${JOB_INDEX} finished successfully ==="
 echo "Date: $(date)"
