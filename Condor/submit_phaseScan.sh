@@ -69,11 +69,12 @@ arguments             = \$(inputFile) \$(ProcId) ${OUTPUT_DIR}
 output                = ${LOG_DIR}/job_\$(ProcId).out
 error                 = ${LOG_DIR}/job_\$(ProcId).err
 log                   = ${LOG_DIR}/condor.log
-+JobFlavour           = "workday"
++JobFlavour           = "tomorrow"
 request_memory        = 4000
 request_cpus          = 1
-request_disk          = 20000000
-should_transfer_files = NO
+request_disk          = 50000000
+should_transfer_files = YES
+transfer_output_files = ""
 queue inputFile from ${SUBMIT_LIST}
 EOF
 

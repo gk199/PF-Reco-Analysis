@@ -26,9 +26,16 @@ git checkout origin/PFdevelopment -- DQMOffline/ParticleFlow PF_README.md
 # Testing new PF Algorithms
 ## Bash Script for New Algos and Re-Reco
 ```
-./SetTimingThreshold.sh <time in ns (5.0)>
+cmsenv
+./SetTimingThreshold.sh <time in ns, such as (5.0)>
 ./TestAllParticleFlow.sh
+./NtupleAllParticleFlow.sh
 ./PlotAllParticleFlow.sh
+mv hcal_comparison.pdf hcal_comparison_<ns>ns.pdf
+
+# all contained in:
+cmsenv
+./ScanTimingThresholds.sh 0 2 3 5 
 ```
 Since most of the timing checks are done at the depth cluster stacking level, the timing cut can actually be scanned by just changing a parameter in the python file (no re-compiling needed):
 ```
@@ -108,12 +115,14 @@ cmsRun MyPFStudy_ReReco_RAW2DIGI_L1Reco_RECO_phaseScanFiles.py
 
 2. Test one job:
 ```
+cmsenv
 cd Condor
 ./submit_phaseScan.sh -t input_files.txt /your/output/dir
 ```
 
 3. Submit all jobs:
 ```
+cmsenv
 cd Condor
 ./submit_phaseScan.sh input_files.txt /your/output/dir
 ```
