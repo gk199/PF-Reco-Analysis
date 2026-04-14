@@ -117,7 +117,7 @@ DEFINE_EDM_PLUGIN(PFClusterBuilderFactory, PFMultiDepthClusterizer, "PFMultiDept
 PFMultiDepthClusterizer::PFMultiDepthClusterizer(const edm::ParameterSet& conf, edm::ConsumesCollector& cc)
     : PFClusterBuilderBase(conf, cc),
       _useTiming(conf.getUntrackedParameter<bool>("useTiming", true)),
-      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 5.0)) {
+      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 5)) {
   const auto& acConf = conf.getParameterSet("allCellsPositionCalc");
   if (!acConf.empty()) {
     const std::string& algoac = acConf.getParameter<std::string>("algoName");

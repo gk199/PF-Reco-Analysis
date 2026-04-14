@@ -10,11 +10,16 @@
 // highest-energy seed, regardless of which depth that seed lives in and
 // regardless of the order clusters are absorbed.
 //
-// Combined with the per-cell cut in Basic2DGenericTopoClusterizer_timing (which
-// ensures cells within each depth layer are already within _timeThreshold of
-// their layer seed), the strictest guarantee applies only if the layer seeds
-// themselves are also within _timeThreshold of the global seed.  For a fully
-// rigorous cut, also consider Option 2 (seed-only timing) as a pre-filter.
+// OOT cell recovery: cells that fail the per-cell timing cut during absorption
+// are NOT permanently dropped.  Instead each such cell is collected into a
+// per-source-depth-cluster residual PFCluster.  After the full in-time (IT)
+// pass, residuals are iteratively re-clustered: within each OOT group the
+// highest-energy seed's time is used as the fixed timing reference (mirroring
+// the IT pre-pass), cells within the threshold are merged, and cells outside
+// form further residuals for the next iteration.  This guarantees every output
+// cluster — IT or OOT — is internally time-consistent, while still allowing a
+// cell that fails one cluster's timing window to join a spatially and temporally
+// compatible OOT group.
 //
 // To use: copy this file to
 //   RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc
@@ -102,20 +107,30 @@ private:
                      const std::vector<ClusterLink>& links,
                      std::vector<unsigned int>& result) const;
 
-  // Absorb all rechits from 'added' into 'main', skipping any rechit whose
-  // time falls outside _timeThreshold of refSeedTime (when timing is enabled).
-  // Returns true if the depth cluster's seed cell was accepted, false if the
-  // seed itself failed the timing cut (depth cluster is effectively OOT).
-  bool absorbCluster(reco::PFCluster& main, const reco::PFCluster& added, double refSeedTime);
+  // Absorb rechits from 'added' into 'main'.  Rechits passing the timing cut go
+  // into 'main'; rechits failing it go into '*residual' (if residual is
+  // non-null).  The seed of *residual is set to the highest-energy OOT rechit.
+  // Pass refSeedTime < -998 (e.g. -999) to disable the timing cut entirely
+  // (used in the OOT re-clustering pass).
+  // Returns true if the added cluster's seed was accepted into main.
+  bool absorbCluster(reco::PFCluster& main,
+                     const reco::PFCluster& added,
+                     double refSeedTime,
+                     reco::PFCluster* residual);
 
-  // rejected[idx] is set true for any depth cluster idx whose seed absorbCluster rejects.
+  // Traverse links from 'point', absorbing neighbours into 'cluster'.
+  // OOT cells from each absorbed depth cluster are collected as a residual
+  // PFCluster and appended to 'residuals' (to be re-clustered in the OOT pass).
+  // Recursion stops at a depth cluster whose seed is OOT (its remaining sub-
+  // links are not traversed; the sub-cluster's deeper neighbours will be picked
+  // up by the outer buildClusters loop as independent anchors).
   void expandCluster(reco::PFCluster&,
                      unsigned int point,
                      std::vector<bool>& mask,
                      const reco::PFClusterCollection&,
                      const std::vector<ClusterLink>& links,
                      double refSeedTime,
-                     std::vector<bool>& rejected);
+                     reco::PFClusterCollection& residuals);
 };
 
 DEFINE_EDM_PLUGIN(PFClusterBuilderFactory, PFMultiDepthClusterizer, "PFMultiDepthClusterizer");
@@ -123,7 +138,7 @@ DEFINE_EDM_PLUGIN(PFClusterBuilderFactory, PFMultiDepthClusterizer, "PFMultiDept
 PFMultiDepthClusterizer::PFMultiDepthClusterizer(const edm::ParameterSet& conf, edm::ConsumesCollector& cc)
     : PFClusterBuilderBase(conf, cc),
       _useTiming(conf.getUntrackedParameter<bool>("useTiming", true)),
-      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 5.0)) {
+      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 5)) {
   const auto& acConf = conf.getParameterSet("allCellsPositionCalc");
   if (!acConf.empty()) {
     const std::string& algoac = acConf.getParameter<std::string>("algoName");
@@ -148,9 +163,13 @@ void PFMultiDepthClusterizer::buildClusters(const reco::PFClusterCollection& inp
 
   std::vector<bool> mask(input.size(), false);
   std::vector<bool> linked(input.size(), false);
-  std::vector<bool> rejected(input.size(), false);
 
   auto&& prunedLinks = prune(links, linked);
+
+  // allResiduals collects per-depth pseudo-clusters built from OOT cells that
+  // were rejected during the IT absorption pass.  They are re-clustered together
+  // in the OOT pass below (pure spatial linking, no timing restriction).
+  reco::PFClusterCollection allResiduals;
 
   for (unsigned int i = 0; i < input.size(); ++i) {
     if (mask[i])
@@ -185,53 +204,74 @@ void PFMultiDepthClusterizer::buildClusters(const reco::PFClusterCollection& inp
 
     reco::PFCluster cluster = input[i];
     mask[i] = true;
-    expandCluster(cluster, i, mask, input, prunedLinks, refSeedTime, rejected);
+    expandCluster(cluster, i, mask, input, prunedLinks, refSeedTime, allResiduals);
     _allCellsPosCalc->calculateAndSetPosition(cluster, hcalCuts);
     output.push_back(cluster);
   }
 
-  // Iterative OOT passes: depth clusters whose seed was rejected by the IT
-  // timing cut are re-clustered among themselves, using each group's own seed
-  // time as the timing reference.  Links are rebuilt from the original
-  // (pre-pruning) set filtered to only the currently unmasked clusters, so OOT
-  // depth clusters that previously lost a link to an IT cluster can now
-  // correctly find each other.  Repeats until no new rejections occur.
-  while (true) {
-    bool anyOOT = false;
-    for (unsigned int i = 0; i < input.size(); ++i)
-      if (rejected[i]) { mask[i] = false; anyOOT = true; }
-    if (!anyOOT) break;
+  // OOT passes: iteratively re-cluster residuals with the same timing
+  // consistency requirement as the IT pass.  Within each OOT group the
+  // highest-energy seed's time is used as the fixed reference; cells that fail
+  // form further residuals that are re-processed in the next iteration.
+  // Terminates when no new residuals are produced.
+  reco::PFClusterCollection currentPool = std::move(allResiduals);
 
-    std::fill(rejected.begin(), rejected.end(), false);
+  while (!currentPool.empty()) {
+    // Position-calculate each entry so that depth() and positionREP() are
+    // valid for shower-shape and spatial-link steps.
+    for (auto& res : currentPool)
+      _allCellsPosCalc->calculateAndSetPosition(res, hcalCuts);
 
-    // Rebuild spatial links among only the unmasked (OOT) clusters.
-    std::vector<ClusterLink> ootLinks;
-    for (const auto& lnk : links)
-      if (!mask[lnk.from()] && !mask[lnk.to()])
-        ootLinks.push_back(lnk);
+    std::vector<double> poolEtaRMS2(currentPool.size(), 0.0);
+    std::vector<double> poolPhiRMS2(currentPool.size(), 0.0);
+    calculateShowerShapes(currentPool, poolEtaRMS2, poolPhiRMS2);
 
-    std::vector<bool> ootLinked(input.size(), false);
-    auto&& ootPrunedLinks = prune(ootLinks, ootLinked);
+    auto poolRawLinks = link(currentPool, poolEtaRMS2, poolPhiRMS2);
 
-    for (unsigned int i = 0; i < input.size(); ++i) {
-      if (mask[i]) continue;
-      if (!ootLinked[i]) {
-        output.push_back(input[i]);
-        mask[i] = true;
+    std::vector<bool> poolLinked(currentPool.size(), false);
+    auto poolPrunedLinks = prune(poolRawLinks, poolLinked);
+
+    std::vector<bool> poolMask(currentPool.size(), false);
+    reco::PFClusterCollection nextPool;
+
+    for (unsigned int i = 0; i < currentPool.size(); ++i) {
+      if (poolMask[i])
+        continue;
+      if (!poolLinked[i]) {
+        output.push_back(currentPool[i]);
+        poolMask[i] = true;
         continue;
       }
+
+      // Pre-pass: find the highest-energy seed among all clusters in this OOT
+      // group to use as the fixed timing reference (mirrors the IT pre-pass).
+      std::vector<bool> visited(currentPool.size(), false);
+      visited[i] = true;
+      std::vector<unsigned int> toMerge = {i};
+      collectLinked(i, visited, poolPrunedLinks, toMerge);
+
       double refSeedTimeOOT = -999.0;
-      for (const auto& frac : input[i].recHitFractions())
-        if (frac.recHitRef()->detId() == input[i].seed()) {
-          refSeedTimeOOT = frac.recHitRef()->time();
-          break;
+      double maxSeedEnergyOOT = -1.0;
+      for (unsigned int idx : toMerge) {
+        for (const auto& frac : currentPool[idx].recHitFractions()) {
+          if (frac.recHitRef()->detId() == currentPool[idx].seed()) {
+            if (frac.recHitRef()->energy() > maxSeedEnergyOOT) {
+              maxSeedEnergyOOT = frac.recHitRef()->energy();
+              refSeedTimeOOT = frac.recHitRef()->time();
+            }
+            break;
+          }
         }
-      reco::PFCluster cluster = input[i];
-      mask[i] = true;
-      expandCluster(cluster, i, mask, input, ootPrunedLinks, refSeedTimeOOT, rejected);
+      }
+
+      reco::PFCluster cluster = currentPool[i];
+      poolMask[i] = true;
+      expandCluster(cluster, i, poolMask, currentPool, poolPrunedLinks, refSeedTimeOOT, nextPool);
       _allCellsPosCalc->calculateAndSetPosition(cluster, hcalCuts);
       output.push_back(cluster);
     }
+
+    currentPool = std::move(nextPool);
   }
 }
 
@@ -356,9 +396,13 @@ std::vector<PFMultiDepthClusterizer::ClusterLink> PFMultiDepthClusterizer::prune
 
 bool PFMultiDepthClusterizer::absorbCluster(reco::PFCluster& main,
                                             const reco::PFCluster& added,
-                                            double refSeedTime) {
+                                            double refSeedTime,
+                                            reco::PFCluster* residual) {
   double e1 = 0.0;
   double e2 = 0.0;
+  // Track highest-energy OOT rechit to set the residual's seed.
+  double resMaxE = -1.0;
+  DetId resSeedId;
 
   for (const auto& fraction : main.recHitFractions())
     if (fraction.recHitRef()->detId() == main.seed())
@@ -367,9 +411,19 @@ bool PFMultiDepthClusterizer::absorbCluster(reco::PFCluster& main,
   bool addedSeedAccepted = false;
   for (const auto& fraction : added.recHitFractions()) {
     // Timing cut against the fixed global highest-energy seed time.
-    // Skip rechits with default invalid time (-999) on either side.
-    if (_useTiming && refSeedTime > -998.0 && fraction.recHitRef()->time() > -998.0 &&
-        std::abs(fraction.recHitRef()->time() - refSeedTime) >= _timeThreshold) {
+    // Rechits with default invalid time (-999) on either side bypass the cut.
+    // refSeedTime < -998 (e.g. -999) disables the cut entirely (OOT pass).
+    bool oot = (_useTiming && refSeedTime > -998.0 && fraction.recHitRef()->time() > -998.0 &&
+                std::abs(fraction.recHitRef()->time() - refSeedTime) >= _timeThreshold);
+    if (oot) {
+      // Route to residual instead of dropping permanently.
+      if (residual) {
+        residual->addRecHitFraction(fraction);
+        if (fraction.recHitRef()->energy() > resMaxE) {
+          resMaxE = fraction.recHitRef()->energy();
+          resSeedId = fraction.recHitRef()->detId();
+        }
+      }
       continue;
     }
     main.addRecHitFraction(fraction);
@@ -380,8 +434,11 @@ bool PFMultiDepthClusterizer::absorbCluster(reco::PFCluster& main,
   }
   if (addedSeedAccepted && e2 > e1)
     main.setSeed(added.seed());
-  // Return false if the depth cluster's seed was filtered out, marking it as
-  // effectively OOT so it can be re-clustered in a subsequent OOT pass.
+  // Set seed on residual so calculateAndSetPosition can find it later.
+  if (residual && !residual->recHitFractions().empty())
+    residual->setSeed(resSeedId);
+  // Return false if the depth cluster's seed was OOT (whole cluster effectively
+  // OOT); caller uses this to decide whether to recurse into deeper links.
   return addedSeedAccepted;
 }
 
@@ -391,40 +448,44 @@ void PFMultiDepthClusterizer::expandCluster(reco::PFCluster& cluster,
                                             const reco::PFClusterCollection& clusters,
                                             const std::vector<ClusterLink>& links,
                                             double refSeedTime,
-                                            std::vector<bool>& rejected) {
+                                            reco::PFClusterCollection& residuals) {
+  // Helper lambda: absorb one depth cluster, collect any OOT cells into a
+  // residual pseudo-cluster, push the residual if non-empty, return whether
+  // the absorbed cluster's seed was IT (for recursion decision).
+  auto absorb = [&](unsigned int idx) -> bool {
+    reco::PFCluster res;
+    bool seedAccepted = absorbCluster(cluster, clusters[idx], refSeedTime, &res);
+    if (!res.recHitFractions().empty())
+      residuals.push_back(std::move(res));
+    return seedAccepted;
+  };
+
   for (const auto& link : links) {
     if (link.from() == point) {
       if (!mask[link.from()]) {
-        if (!absorbCluster(cluster, clusters[link.from()], refSeedTime))
-          rejected[link.from()] = true;
+        absorb(link.from());  // from==point, already in cluster; no-op if masked
         mask[link.from()] = true;
       }
-
       if (!mask[link.to()]) {
-        if (absorbCluster(cluster, clusters[link.to()], refSeedTime)) {
-          mask[link.to()] = true;
-          expandCluster(cluster, link.to(), mask, clusters, links, refSeedTime, rejected);
-        } else {
-          rejected[link.to()] = true;
-          mask[link.to()] = true;
-        }
+        bool accepted = absorb(link.to());
+        mask[link.to()] = true;
+        // Only recurse deeper if the absorbed cluster's seed was IT; if OOT,
+        // its downstream links will be picked up as independent anchors by the
+        // outer buildClusters loop.
+        if (accepted)
+          expandCluster(cluster, link.to(), mask, clusters, links, refSeedTime, residuals);
       }
     }
     if (link.to() == point) {
       if (!mask[link.to()]) {
-        if (!absorbCluster(cluster, clusters[link.to()], refSeedTime))
-          rejected[link.to()] = true;
+        absorb(link.to());  // to==point, already in cluster; no-op if masked
         mask[link.to()] = true;
       }
-
       if (!mask[link.from()]) {
-        if (absorbCluster(cluster, clusters[link.from()], refSeedTime)) {
-          mask[link.from()] = true;
-          expandCluster(cluster, link.from(), mask, clusters, links, refSeedTime, rejected);
-        } else {
-          rejected[link.from()] = true;
-          mask[link.from()] = true;
-        }
+        bool accepted = absorb(link.from());
+        mask[link.from()] = true;
+        if (accepted)
+          expandCluster(cluster, link.from(), mask, clusters, links, refSeedTime, residuals);
       }
     }
   }
