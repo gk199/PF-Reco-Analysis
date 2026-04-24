@@ -200,6 +200,15 @@ Note that the Global Tag in `runPFObjectsNtupler_cfg.py` may need to be adjusted
 
 Note: when you run the ntupler on the re-reco output (not directly on RAW), the process label in the input tag will need to match. If needed, you can override taguMNio in `runPFObjectsNtupler_cfg.py` by adding e.g. `taguMNio = cms.untracked.InputTag("hcalDigis", "", "ReRECO")` to the pfObjectsNtupler PSet.
 
+## Phase Scan Ntupling
+To ntuple all phase scan re-reco output files from EOS into a single ntuple:
+```
+cmsenv
+proxy
+./NtuplePhaseScan.sh
+```
+This discovers all `pf_only_reReco_phaseScan_job*.root` files under `/eos/user/g/gkopp/PF_PhaseScan/` via xrootd and runs them through the standard ntupler in one `cmsRun` call, writing the output ntuple directly to `/eos/user/g/gkopp/PF_PhaseScan/pfObjectsNtuple_phaseScan.root` to avoid filling AFS quota. The `laserType` branch (from the HCAL uMNio digi, `valueUserWord(1)`) encodes the phase delay for each event.
+
 # Plotting
 ```
 python3 Plotting/plot_pfObjects.py
@@ -216,6 +225,17 @@ With the bash script:
 ```
 ./PlotAllParticleFlow.sh
 ```
+
+## Phase Scan Timing Plots
+To plot PF cluster time vs phase delay (`laserType`) from the phase scan ntuple:
+```
+python3 Plotting/plot_phaseScan_timing.py \
+    --input pfObjectsNtuple_phaseScan.root \
+    --pdf phaseScan_timing.pdf \
+    --output phaseScan_timing.root
+```
+Produces 2D histograms and mean-value profiles (TProfile) of HCAL cluster time, HBHE rechit time, and ECAL cluster time vs `laserType`, plus a combined overlay of all three profiles. An energy threshold (`--emin`, default 1 GeV) is applied to suppress noise hits.
+
 # Event Display
 The event display is done from the `pfObjectsNtuple.root`.
 ```
