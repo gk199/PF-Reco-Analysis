@@ -64,7 +64,8 @@ private:
 
   // HCAL clusters (post-depth-stacking: particleFlowClusterHCAL)
   std::vector<float> hcal_energy_, hcal_eta_, hcal_phi_, hcal_time_, hcal_depth_;
-  // HBHE rechits associated to clusters
+  std::vector<int> hcal_nRecHits_;  // number of PFRecHit fractions in each cluster
+  // HBHE rechits associated to clusters (matched by DetId through PFCluster rechit fractions)
   std::vector<float> hbhe_rechit_energy_; std::vector<float> hbhe_rechit_eta_; std::vector<float> hbhe_rechit_phi_; std::vector<float> hbhe_rechit_depth_; std::vector<float> hbhe_rechit_time_; std::vector<int> hbhe_rechit_clusterIndex_;
 
   // PF Blocks (just store number of elements for now)
@@ -112,7 +113,8 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
   tree_->Branch("hcal_phi", &hcal_phi_);
   tree_->Branch("hcal_time", &hcal_time_);
   tree_->Branch("hcal_depth", &hcal_depth_);
-  // HBHE rechit branches
+  tree_->Branch("hcal_nRecHits", &hcal_nRecHits_);
+  // HBHE rechit branches (matched by DetId through PFCluster rechit fractions)
   tree_->Branch("hbhe_rechit_energy", &hbhe_rechit_energy_);
   tree_->Branch("hbhe_rechit_eta", &hbhe_rechit_eta_);
   tree_->Branch("hbhe_rechit_phi", &hbhe_rechit_phi_);
@@ -176,7 +178,7 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup&)
   // Clear all vectors
   pf_pt_.clear(); pf_eta_.clear(); pf_phi_.clear(); pf_energy_.clear(); pf_charge_.clear(); pf_pdgId_.clear();
   ecal_energy_.clear(); ecal_eta_.clear(); ecal_phi_.clear(); ecal_time_.clear();
-  hcal_energy_.clear(); hcal_eta_.clear(); hcal_phi_.clear(); hcal_time_.clear(); hcal_depth_.clear();
+  hcal_energy_.clear(); hcal_eta_.clear(); hcal_phi_.clear(); hcal_time_.clear(); hcal_depth_.clear(); hcal_nRecHits_.clear();
   hbhe_rechit_energy_.clear(); hbhe_rechit_eta_.clear(); hbhe_rechit_phi_.clear(); hbhe_rechit_depth_.clear(); hbhe_rechit_time_.clear(); hbhe_rechit_clusterIndex_.clear();
   num_pfBlocks_ = 0;
   laserType_ = -1000;
@@ -230,30 +232,26 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup&)
       hcal_phi_.push_back(cl.phi());
       hcal_time_.push_back(cl.time());
       hcal_depth_.push_back(cl.depth());
+      hcal_nRecHits_.push_back((int)cl.recHitFractions().size());
 
-      // std::cout << "Cluster eta: " << cl.eta() << " phi: " << cl.phi() << std::endl;
+      int clIdx = (int)hcal_energy_.size() - 1;
 
-      // Loop over HBHE rechits associated to this HCAL cluster. Stored as hbhereco, these are the raw ones instead of PF (since that was a transitory collection)
+      // Match HBHE rechits to this cluster via hitsAndFractions() — stores DetIds
+      // directly in CaloCluster, avoiding a Ref<PFRecHitCollection> dereference
+      // that fails when particleFlowRecHitHBHE is not saved in the input file.
       if (hbheRechits.isValid()) {
-        for (const auto& rh : *hbheRechits) {
-          // Get position info from HBHE rechit geometry
-          HcalDetId detid = rh.id();
-          // std::cout << "Hit energy: " << rh.energy()
-          //     << " detId: " << detid.rawId()
-          //     << " depth: " << detid.depth() << std::endl;
+        for (const auto& [detIdRaw, fraction] : cl.hitsAndFractions()) {
+          HcalDetId detid(detIdRaw);
+          auto it = hbheRechits->find(detid);
+          if (it == hbheRechits->end()) continue;
 
           auto [rh_eta, rh_phi] = hcalEtaPhiFromDetId(detid);
-
-          if (std::abs(rh_eta - cl.eta()) > 0.4) continue;
-          if (reco::deltaR(cl.eta(), cl.phi(), rh_eta, rh_phi) > 0.2) continue;
-
-          // Save the rechit info
-          hbhe_rechit_energy_.push_back(rh.energy());
+          hbhe_rechit_energy_.push_back(it->energy());
           hbhe_rechit_eta_.push_back(rh_eta);
           hbhe_rechit_phi_.push_back(rh_phi);
           hbhe_rechit_depth_.push_back(detid.depth());
-          hbhe_rechit_time_.push_back(rh.time()); // MAHI reconstructed time
-          hbhe_rechit_clusterIndex_.push_back(hcal_energy_.size() - 1); // save cluster index association so it is possible to map backwards to the cluster this rechit was near
+          hbhe_rechit_time_.push_back(it->time());
+          hbhe_rechit_clusterIndex_.push_back(clIdx);
         }
       }
     }

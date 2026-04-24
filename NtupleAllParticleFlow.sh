@@ -1,5 +1,7 @@
 #!/bin/bash
 
+cmsenv
+
 cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
     inputFiles=file:pf_only_reReco_MC_Sim_standardPF.root \
     outputFile=pfObjectsNtuple_standardPF.root

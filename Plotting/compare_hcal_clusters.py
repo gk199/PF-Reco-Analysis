@@ -11,12 +11,11 @@ Source collection: particleFlowClusterHCAL (post-depth-stacking)
 Plots:
   1. Number of HCAL clusters per event
   2. Total HCAL cluster energy per event
-  3. Number of HBHE hits per HCAL cluster (from rechit-cluster matching)
+  3. Number of PF rechits per HCAL cluster (from hcal_nRecHits branch)
 """
 
 import argparse
 import ROOT
-from collections import Counter
 
 ROOT.gROOT.SetBatch(True)
 ROOT.gStyle.SetOptStat(0)
@@ -118,6 +117,11 @@ h_ncl   = {}   # N clusters per event
 h_etot  = {}   # total cluster energy per event
 h_nhits = {}   # hits per cluster (uses hbhe_rechit_clusterIndex)
 
+# accumulators for energy conservation cross-check
+sum_cluster_energy  = {}   # sum of hcal_energy per event, accumulated over events
+sum_rechit_energy   = {}   # sum of hbhe_rechit_energy per event, accumulated over events
+n_events            = {}
+
 for label in LABELS:
     h_ncl[label]   = ROOT.TH1F(f"h_ncl_{label}",
         f"{label} — HCAL clusters/event;N_{{clusters}};Entries",
@@ -126,7 +130,7 @@ for label in LABELS:
         f"{label} — HCAL total cluster energy/event;#SigmaE [GeV];Entries",
         50, 0, 150)
     h_nhits[label] = ROOT.TH1F(f"h_nhits_{label}",
-        f"{label} — HBHE hits per HCAL cluster;N_{{hits}};Entries",
+        f"{label} — PF rechits per HCAL cluster;N_{{PF rechits}};Entries",
         50, 0, 50)
 
 # ── fill histograms ───────────────────────────────────────────────────────────
@@ -142,14 +146,43 @@ for label in LABELS:
 
     print(f"Processing {label}: {tree.GetEntries()} events")
 
+    sum_cluster_energy[label] = 0.0
+    sum_rechit_energy[label]  = 0.0
+    n_events[label]           = 0
+
     for event in tree:
         n_cl = len(event.hcal_energy)
         h_ncl[label].Fill(n_cl)
-        h_etot[label].Fill(sum(event.hcal_energy))
 
-        hit_counts = Counter(event.hbhe_rechit_clusterIndex)
-        for cl_idx in range(n_cl):
-            h_nhits[label].Fill(hit_counts.get(cl_idx, 0))
+        ecl = sum(event.hcal_energy)
+        erh = sum(event.hbhe_rechit_energy)
+        h_etot[label].Fill(ecl)
+
+        sum_cluster_energy[label] += ecl
+        sum_rechit_energy[label]  += erh
+        n_events[label]           += 1
+
+        for n in event.hcal_nRecHits:
+            h_nhits[label].Fill(n)
+
+# ── energy conservation cross-check ──────────────────────────────────────────
+
+# Column meanings:
+#   Mean cluster ΣE  — mean of sum(hcal_energy) per event; should be equal across algorithms
+#   Mean raw rechit ΣE — mean of sum(hbhe_rechit_energy) per event; should be equal across
+#                        algorithms (same hbhereco input) and is a sanity check that the same
+#                        events/rechits were used; the offset vs cluster energy is calibration
+print()
+print(f"{'Algorithm':<22} {'Events':>7}  {'Mean cluster ΣE [GeV]':>22}  {'Mean raw rechit ΣE [GeV]':>24}  {'Offset (calib) [GeV]':>20}")
+print("-" * 103)
+for label in LABELS:
+    if label not in n_events or n_events[label] == 0:
+        continue
+    n  = n_events[label]
+    ec = sum_cluster_energy[label] / n
+    er = sum_rechit_energy[label]  / n
+    print(f"{label:<22} {n:>7}  {ec:>22.3f}  {er:>24.3f}  {ec - er:>20.3f}")
+print()
 
 # ── apply styles ──────────────────────────────────────────────────────────────
 
@@ -183,7 +216,7 @@ canvas.Print(args.pdf)
 
 n3, l3 = draw_overlay(canvas,
     [h_nhits[l] for l in active], active,
-    "N_{HBHE hits} per cluster",
+    "N_{PF rechits} per cluster",
     logy=True)
 kept += [n3, l3, draw_cms_label()]
 canvas.Update()
