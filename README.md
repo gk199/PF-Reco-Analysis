@@ -134,6 +134,22 @@ condor_q -better-analyze <jobid>  # diagnose a held/failing job
 tail -f Condor/logs/condor.log    # watch the log
 ```
 
+## DiPionGun MC samples
+
+DiPionGun GEN-SIM files (DR = angular separation, DT = time offset in ns) live in `/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/MC_Generation/CMSSW_15_0_6/src/`. A dedicated config handles the different era and GlobalTag (`Run3_2024` / `auto:phase1_2024_realistic`) and accepts `inputFiles` and `outputFile` as command-line arguments:
+```
+cmsRun MyPFStudy_ReReco_DiPionGun_DIGI_RAW2DIGI_L1Reco_RECO.py \
+    inputFiles=file:/path/to/DiPionGun_DR0.1_DT0.0_GEN-SIM.root \
+    outputFile=pf_only_reReco_DiPionGun_DR0.1_DT0.0.root
+```
+
+To run RECO + ntupling over all 9 DR/DT combinations in one go:
+```
+cmsenv
+./RunDiPionGunSamples.sh
+```
+Outputs are labeled `pf_only_reReco_DiPionGun_DR<X>_DT<Y>.root` and `pfObjectsNtuple_DiPionGun_DR<X>_DT<Y>.root`.
+
 ## MC cmsDriver command
 For MC, a slightly different python config is needed (MC specific GlobalTag, MC flag, no pp scenario). The two config generations are given below. For MC, add `outputCommands = cms.untracked.vstring('drop *', 'keep *_g4SimHits_*_*', 'keep *_genParticles_*_*')` in `process.out` to keep the sim hits and gen particles (for Simon's truth matching studies). 
 ```
@@ -230,7 +246,7 @@ With the bash script:
 To plot PF cluster time vs phase delay (`laserType`) from the phase scan ntuple:
 ```
 python3 Plotting/plot_phaseScan_timing.py \
-    --input pfObjectsNtuple_phaseScan.root \
+    --input /eos/user/g/gkopp/PF_PhaseScan/pfObjectsNtuple_phaseScan.root \
     --pdf phaseScan_timing.pdf \
     --output phaseScan_timing.root
 ```

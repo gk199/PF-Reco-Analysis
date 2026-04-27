@@ -41,29 +41,15 @@ if not tree:
 
 print(f"Opened {args.input}: {tree.GetEntries()} events")
 
-# ── discover laserType range ──────────────────────────────────────────────────
+# ── discover laserType range (fast C++-level scan, excludes sentinel -1000) ───
 
-tree.GetEntry(0)
-laser_min, laser_max = ROOT.Long(0), ROOT.Long(0)
-tree.GetMinimumStump("laserType", laser_min, -999)
-tree.GetMaximumStump("laserType", laser_max, 9999)
-
-# Fall back to scanning if GetMinimumStump is unavailable
-lt_vals = set()
-for ev in tree:
-    if ev.laserType != -1000:
-        lt_vals.add(ev.laserType)
-tree.GetEntry(0)  # reset
-
-if lt_vals:
-    lt_min = min(lt_vals)
-    lt_max = max(lt_vals)
-else:
-    lt_min, lt_max = 0, 100
-
-print(f"laserType range: {lt_min} – {lt_max}  ({len(lt_vals)} distinct values)")
-
+tree.Draw("laserType>>_hlt_range", "laserType > -999", "goff")
+_hlt_range = ROOT.gDirectory.Get("_hlt_range")
+lt_min = int(_hlt_range.GetXaxis().GetXmin())
+lt_max = int(_hlt_range.GetXaxis().GetXmax())
 n_lt_bins = lt_max - lt_min + 1
+
+print(f"laserType range: {lt_min} – {lt_max}  ({n_lt_bins} bins)")
 
 # ── book histograms ───────────────────────────────────────────────────────────
 
