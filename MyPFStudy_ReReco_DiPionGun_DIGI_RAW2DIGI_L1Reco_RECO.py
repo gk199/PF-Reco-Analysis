@@ -1,33 +1,32 @@
-# DIGI -> RAW2DIGI -> L1Reco -> RECO for DiPionGun GEN-SIM samples.
-# Era and GlobalTag match the DiPionGun generation (Run3_2024 / phase1_2024_realistic).
+# DIGI -> RAW2DIGI -> L1Reco -> RECO for DiPionGun GEN-SIM-RAW samples.
+# Era and GlobalTag match the SinglePiPt10 generation (Run3 / phase1_2025_realistic).
 #
 # Usage:
 #   cmsRun MyPFStudy_ReReco_DiPionGun_DIGI_RAW2DIGI_L1Reco_RECO.py \
-#       inputFiles=file:/path/to/DiPionGun_DR0.1_DT0.0_GEN-SIM.root \
+#       inputFiles=file:/path/to/DiPionGun_DR0.1_DT0.0_GEN-SIM-RAW.root \
 #       outputFile=pf_only_reReco_DiPionGun_DR0.1_DT0.0.root
 
 import FWCore.ParameterSet.Config as cms
 from FWCore.ParameterSet.VarParsing import VarParsing
 
 options = VarParsing('analysis')
-options.inputFiles = 'file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/MC_Generation/CMSSW_15_0_6/src/DiPionGun_DR0.1_DT0.0_GEN-SIM.root'
+options.inputFiles = 'file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/MC_Generation/CMSSW_15_0_6/src/DiPionGun_DR0.1_DT0.0_GEN-SIM-RAW.root'
 options.outputFile = 'pf_only_reReco_DiPionGun_DR0.1_DT0.0.root'
-options.maxEvents  = 100
 options.parseArguments()
+# maxEvents is set directly on process, not via VarParsing, to avoid VarParsing
+# appending _numEventN to the output filename.
 
-from Configuration.Eras.Era_Run3_2024_cff import Run3_2024
+from Configuration.Eras.Era_Run3_cff import Run3
 
-process = cms.Process('ReRECO', Run3_2024)
+process = cms.Process('ReRECO', Run3)
 
 # import of standard configurations
 process.load('Configuration.StandardSequences.Services_cff')
 process.load('SimGeneral.HepPDTESSource.pythiapdt_cfi')
 process.load('FWCore.MessageService.MessageLogger_cfi')
 process.load('Configuration.EventContent.EventContent_cff')
-process.load('SimGeneral.MixingModule.mixNoPU_cfi')
 process.load('Configuration.StandardSequences.GeometryRecoDB_cff')
 process.load('Configuration.StandardSequences.MagneticField_cff')
-process.load('Configuration.StandardSequences.Digi_cff')
 process.load('Configuration.StandardSequences.RawToDigi_cff')
 process.load('Configuration.StandardSequences.L1Reco_cff')
 process.load('Configuration.StandardSequences.Reconstruction_cff')
@@ -35,7 +34,7 @@ process.load('Configuration.StandardSequences.EndOfProcess_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 
 process.maxEvents = cms.untracked.PSet(
-    input = cms.untracked.int32(options.maxEvents),
+    input = cms.untracked.int32(100),
     output = cms.optional.untracked.allowed(cms.int32, cms.PSet)
 )
 
@@ -97,9 +96,9 @@ process.options = cms.untracked.PSet(
     wantSummary = cms.untracked.bool(False)
 )
 
-# GlobalTag matching the Run3_2024 DiPionGun generation conditions
+# GlobalTag matching the Run3 / phase1_2025_realistic conditions (same as SinglePiPt10)
 from Configuration.AlCa.GlobalTag import GlobalTag
-process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:phase1_2024_realistic', '')
+process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:phase1_2025_realistic', '')
 
 # Output: slim RECO keeping only PF and calorimeter objects
 process.RECOoutput = cms.OutputModule('PoolOutputModule',
@@ -121,7 +120,6 @@ process.RECOoutput = cms.OutputModule('PoolOutputModule',
 )
 
 # Path and EndPath definitions
-process.digitisation_step  = cms.Path(process.pdigi)
 process.raw2digi_step      = cms.Path(process.RawToDigi)
 process.L1Reco_step        = cms.Path(process.L1Reco)
 process.reconstruction_step = cms.Path(process.reconstruction)
@@ -129,7 +127,6 @@ process.endjob_step        = cms.EndPath(process.endOfProcess)
 process.RECOoutput_step    = cms.EndPath(process.RECOoutput)
 
 process.schedule = cms.Schedule(
-    process.digitisation_step,
     process.raw2digi_step,
     process.L1Reco_step,
     process.reconstruction_step,

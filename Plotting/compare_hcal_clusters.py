@@ -21,7 +21,9 @@ ROOT.gROOT.SetBatch(True)
 ROOT.gStyle.SetOptStat(0)
 
 parser = argparse.ArgumentParser(description="Compare HCAL clusters across PF approaches")
-parser.add_argument("--inputdir", default=".", help="Directory containing pfObjectsNtuple_*.root files")
+parser.add_argument("--inputdir", default=".", help="Directory containing input ROOT files")
+parser.add_argument("--prefix",   default="pfObjectsNtuple_", help="Filename prefix before the algorithm label")
+parser.add_argument("--suffix",   default="",                  help="Filename suffix after the algorithm label (before .root)")
 parser.add_argument("--output",   default="hcal_cluster_comparison.root", help="Output ROOT file")
 parser.add_argument("--pdf",      default="hcal_cluster_comparison.pdf",  help="Output PDF with all plots")
 args = parser.parse_args()
@@ -33,7 +35,7 @@ STYLES = [1, 2, 7, 9]  # solid, dashed, dot-dashed, dotted
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def open_tree(label):
-    fname = f"{args.inputdir}/pfObjectsNtuple_{label}.root"
+    fname = f"{args.inputdir}/{args.prefix}{label}{args.suffix}.root"
     f = ROOT.TFile.Open(fname)
     if not f or f.IsZombie():
         raise RuntimeError(f"Cannot open {fname}")

@@ -134,21 +134,26 @@ condor_q -better-analyze <jobid>  # diagnose a held/failing job
 tail -f Condor/logs/condor.log    # watch the log
 ```
 
-## DiPionGun MC samples
+## DiPion Gun MC samples
 
-DiPionGun GEN-SIM files (DR = angular separation, DT = time offset in ns) live in `/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/MC_Generation/CMSSW_15_0_6/src/`. A dedicated config handles the different era and GlobalTag (`Run3_2024` / `auto:phase1_2024_realistic`) and accepts `inputFiles` and `outputFile` as command-line arguments:
+DiPion gun GEN-SIM-RAW files (DR = angular separation, DT = time offset in ns) live in `/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/MC_Generation/CMSSW_15_0_6/src/`. Generated with `Run3` / `auto:phase1_2025_realistic` to match the SinglePiPt10 conditions. A dedicated config accepts `inputFiles` and `outputFile` as command-line arguments:
 ```
 cmsRun MyPFStudy_ReReco_DiPionGun_DIGI_RAW2DIGI_L1Reco_RECO.py \
-    inputFiles=file:/path/to/DiPionGun_DR0.1_DT0.0_GEN-SIM.root \
+    inputFiles=file:/path/to/DiPionGun_DR0.1_DT0.0_GEN-SIM-RAW.root \
     outputFile=pf_only_reReco_DiPionGun_DR0.1_DT0.0.root
 ```
 
 To run RECO + ntupling over all 9 DR/DT combinations in one go:
 ```
 cmsenv
-./RunDiPionGunSamples.sh
+./RunDiPionGunSamples.sh 0 <ns>
 ```
 Outputs are labeled `pf_only_reReco_DiPionGun_DR<X>_DT<Y>.root` and `pfObjectsNtuple_DiPionGun_DR<X>_DT<Y>.root`.
+
+To plot:
+```
+./PlotDiPionGunSamples.sh 0 <3 5> 
+```
 
 ## MC cmsDriver command
 For MC, a slightly different python config is needed (MC specific GlobalTag, MC flag, no pp scenario). The two config generations are given below. For MC, add `outputCommands = cms.untracked.vstring('drop *', 'keep *_g4SimHits_*_*', 'keep *_genParticles_*_*')` in `process.out` to keep the sim hits and gen particles (for Simon's truth matching studies). 

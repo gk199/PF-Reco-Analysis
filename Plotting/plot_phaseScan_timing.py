@@ -17,6 +17,7 @@ import ROOT
 
 ROOT.gROOT.SetBatch(True)
 ROOT.gStyle.SetOptStat(0)
+ROOT.gStyle.SetOptTitle(0)
 ROOT.gStyle.SetPalette(ROOT.kBird)
 
 parser = argparse.ArgumentParser(description="PF timing vs phase scan delay")
@@ -41,48 +42,45 @@ if not tree:
 
 print(f"Opened {args.input}: {tree.GetEntries()} events")
 
-# ── discover laserType range (fast C++-level scan, excludes sentinel -1000) ───
+# ── laserType axis range (-1000 and 999 are sentinel/default values) ─────────
 
-tree.Draw("laserType>>_hlt_range", "laserType > -999", "goff")
-_hlt_range = ROOT.gDirectory.Get("_hlt_range")
-lt_min = int(_hlt_range.GetXaxis().GetXmin())
-lt_max = int(_hlt_range.GetXaxis().GetXmax())
-n_lt_bins = lt_max - lt_min + 1
+lt_min, lt_max = -10, 20
+n_lt_bins = lt_max - lt_min
 
-print(f"laserType range: {lt_min} – {lt_max}  ({n_lt_bins} bins)")
+print(f"laserType range: {lt_min} – {lt_max}")
 
 # ── book histograms ───────────────────────────────────────────────────────────
 
 TIME_BINS, TIME_LO, TIME_HI = 100, -25.0, 25.0
 
 h2_hcal = ROOT.TH2F("h2_hcal_time_vs_laser",
-    "HCAL cluster time vs phase delay;laserType;Cluster time [ns]",
+    "HCAL cluster time vs phase delay;Phase Delay [ns];HCAL cluster time [ns]",
     n_lt_bins, lt_min - 0.5, lt_max + 0.5,
     TIME_BINS, TIME_LO, TIME_HI)
 
 h2_hbhe = ROOT.TH2F("h2_hbhe_time_vs_laser",
-    "HBHE rechit time vs phase delay;laserType;Rechit time [ns]",
+    "HBHE rechit time vs phase delay;Phase Delay [ns];HBHE rechit time [ns]",
     n_lt_bins, lt_min - 0.5, lt_max + 0.5,
     TIME_BINS, TIME_LO, TIME_HI)
 
 h2_ecal = ROOT.TH2F("h2_ecal_time_vs_laser",
-    "ECAL cluster time vs phase delay;laserType;Cluster time [ns]",
+    "ECAL cluster time vs phase delay;Phase Delay [ns];ECAL cluster time [ns]",
     n_lt_bins, lt_min - 0.5, lt_max + 0.5,
     TIME_BINS, TIME_LO, TIME_HI)
 
 # Profiles (mean time vs laserType)
 prof_hcal = ROOT.TProfile("prof_hcal_time_vs_laser",
-    "Mean HCAL cluster time vs phase delay;laserType;Mean cluster time [ns]",
+    "Mean HCAL cluster time vs phase delay;Phase Delay [ns];Mean HCAL cluster time [ns]",
     n_lt_bins, lt_min - 0.5, lt_max + 0.5,
     TIME_LO, TIME_HI)
 
 prof_hbhe = ROOT.TProfile("prof_hbhe_time_vs_laser",
-    "Mean HBHE rechit time vs phase delay;laserType;Mean rechit time [ns]",
+    "Mean HBHE rechit time vs phase delay;Phase Delay [ns];Mean HBHE rechit time [ns]",
     n_lt_bins, lt_min - 0.5, lt_max + 0.5,
     TIME_LO, TIME_HI)
 
 prof_ecal = ROOT.TProfile("prof_ecal_time_vs_laser",
-    "Mean ECAL cluster time vs phase delay;laserType;Mean cluster time [ns]",
+    "Mean ECAL cluster time vs phase delay;Phase Delay [ns];Mean ECAL cluster time [ns]",
     n_lt_bins, lt_min - 0.5, lt_max + 0.5,
     TIME_LO, TIME_HI)
 
@@ -91,7 +89,7 @@ prof_ecal = ROOT.TProfile("prof_ecal_time_vs_laser",
 n_skip = 0
 for ev in tree:
     lt = ev.laserType
-    if lt == -1000:
+    if lt == -1000 or lt == 999:
         n_skip += 1
         continue
 
