@@ -26,8 +26,8 @@ cd "$PF_DIR"
 
 # DRS="0.1 0.4 0.8"
 # DTS="0.0 1.0 5.0"
-DRS="0.4"
-DTS="0.0"
+DRS="0.1 0.4 0.8"
+DTS="0.0 1.0 5.0"
 
 ALGOS="standardPF cellTimingPF seedTimingPF depth1SeedTimingPF"
 

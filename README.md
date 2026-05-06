@@ -247,6 +247,45 @@ With the bash script:
 ./PlotAllParticleFlow.sh
 ```
 
+## Testing the HCAL Cluster Timing Fix
+
+`Basic2DGenericPFlowPositionCalc.cc` was edited to skip rechits with `time == -999` (the invalid sentinel) when computing the energy-weighted cluster time, and to set cluster time to `-999` when all constituent rechits are invalid. To validate a before/after change to this code:
+
+**1. Build**
+```bash
+cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src
+scram b -j8
+cd PF-Reco-Analysis
+```
+
+**2. Save the pre-fix RECO output and produce a new one**
+```bash
+mv pf_only_reReco_MC_Sim_standardPF.root pf_only_reReco_MC_Sim_standardPF_before.root
+cmsRun MyPFStudy_ReReco_MC_Sim_DIGI_RAW2DIGI_L1Reco_RECO.py
+mv pf_only_reReco_MC_Sim.root pf_only_reReco_MC_Sim_standardPF.root
+```
+
+**3. Run the ntupler on both**
+```bash
+cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
+    inputFiles=file:pf_only_reReco_MC_Sim_standardPF_before.root \
+    outputFile=pfObjectsNtuple_standardPF_before.root
+
+cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
+    inputFiles=file:pf_only_reReco_MC_Sim_standardPF.root \
+    outputFile=pfObjectsNtuple_standardPF_after.root
+```
+
+**4. Plot the comparison**
+```bash
+python3 Plotting/compare_timing_fix.py \
+    --before pfObjectsNtuple_standardPF_before.root \
+    --after  pfObjectsNtuple_standardPF_after.root \
+    --output timing_fix_comparison.pdf
+```
+
+The script (`Plotting/compare_timing_fix.py`) produces five plots: `hcal_time` full range (log y), `hcal_time` zoom on valid clusters, fraction of clusters with `time == -999`, fraction of invalid rechits per cluster, and a 2D scatter of cluster time vs. mean valid rechit time. It also prints a summary line counting how many clusters changed to `time == -999` (those that previously had a bogus average contaminated by invalid hits).
+
 ## Phase Scan Timing Plots
 To plot PF cluster time vs phase delay (`laserType`) from the phase scan ntuple:
 ```
