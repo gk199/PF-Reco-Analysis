@@ -15,8 +15,8 @@ cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_original.cc.edit Reco
 cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_original_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
 scram b -j 8
 cd PF-Reco-Analysis
-cmsRun MyPFStudy_ReReco_MC_Sim_DIGI_RAW2DIGI_L1Reco_RECO.py
-mv pf_only_reReco_MC_Sim.root pf_only_reReco_MC_Sim_standardPF.root
+cmsRun MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py
+mv pf_only_reReco_MC.root pf_only_reReco_MC_standardPF.root
 
 echo " "
 echo "-----------------------------------"
@@ -30,8 +30,8 @@ cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_timing.cc.edit RecoPa
 cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
 scram b -j 8
 cd PF-Reco-Analysis
-cmsRun MyPFStudy_ReReco_MC_Sim_DIGI_RAW2DIGI_L1Reco_RECO.py
-mv pf_only_reReco_MC_Sim.root pf_only_reReco_MC_Sim_cellTimingPF.root
+cmsRun MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py
+mv pf_only_reReco_MC.root pf_only_reReco_MC_cellTimingPF.root
 
 echo " "
 echo "-----------------------------------"
@@ -46,8 +46,8 @@ cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_seedTiming.cc.edit Re
 cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_seedTiming_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
 scram b -j 8
 cd PF-Reco-Analysis
-cmsRun MyPFStudy_ReReco_MC_Sim_DIGI_RAW2DIGI_L1Reco_RECO.py
-mv pf_only_reReco_MC_Sim.root pf_only_reReco_MC_Sim_seedTimingPF.root
+cmsRun MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py
+mv pf_only_reReco_MC.root pf_only_reReco_MC_seedTimingPF.root
 
 echo " "
 echo "-----------------------------------"
@@ -60,8 +60,8 @@ cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_depth1Timing.cc.edit 
 cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_depth1Timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py 
 scram b -j 8
 cd PF-Reco-Analysis
-cmsRun MyPFStudy_ReReco_MC_Sim_DIGI_RAW2DIGI_L1Reco_RECO.py
-mv pf_only_reReco_MC_Sim.root pf_only_reReco_MC_Sim_depth1SeedTimingPF.root
+cmsRun MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py
+mv pf_only_reReco_MC.root pf_only_reReco_MC_depth1SeedTimingPF.root
 
 echo " "
 echo "All tests completed, output files are in PF-Reco-Analysis directory"

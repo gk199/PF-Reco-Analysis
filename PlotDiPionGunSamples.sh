@@ -16,10 +16,10 @@ TIMES="${*:-0}"
 PF_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLOT_SCRIPT="$PF_DIR/Plotting/compare_hcal_clusters.py"
 
-# DRS="0.1 0.4 0.8"
-# DTS="0.0 1.0 5.0"
-DRS="0.4"
-DTS="0.0"
+DRS="0.1 0.4 0.8"
+DTS="0.0 1.0 5.0"
+# DRS="0.4"
+# DTS="0.0"
 
 # ── main loop ─────────────────────────────────────────────────────────────────
 

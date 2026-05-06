@@ -94,15 +94,13 @@ cmsenv
 voms-proxy-init --rfc --voms cms --valid 172:00
 
 cmsRun MyPFStudy_ReReco*_RAW2DIGI_L1Reco_RECO.py
-
-cmsRun MyPFStudy_ReReco_MC_Sim_DIGI_RAW2DIGI_L1Reco_RECO.py
 ```
-The output will be `pf_only_reReco*.root` depending which files is run. Each one creates an output file at a different datatier. For data, the options are: RECO, AOD, AODfull (with trigger results). AOD with trigger results can be run through the [DQM plotting framework](https://github.com/gk199/cmssw/blob/PFdevelopment/PF_README.md#monitoring-and-plotting-dqmoffline). For MC, the options are: `MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py` to save PF clusters, cands, and rechits; or `MyPFStudy_ReReco_MC_Sim_DIGI_RAW2DIGI_L1Reco_RECO.py` to also save g4 sim hits and gen particles (the default, as it is compatible with Simon's framework). 
+The output will be `pf_only_reReco*.root` depending which file is run. Each one creates an output file at a different datatier. For data, the options are: RECO, AOD, AODfull (with trigger results). AOD with trigger results can be run through the [DQM plotting framework](https://github.com/gk199/cmssw/blob/PFdevelopment/PF_README.md#monitoring-and-plotting-dqmoffline). For MC, use `MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py` to save PF clusters, cands, rechits, g4 sim hits, and gen particles. **Do not use** `MyPFStudy_ReReco_MC_Sim_DIGI_RAW2DIGI_L1Reco_RECO.py` — it re-runs the DIGI step from GEN-SIM-RAW SimHits with potentially mismatched conditions, inflating HCAL cluster counts.
 
 To check the event content, use `edmDumpEventContent` and search for the collection you are interested in:
 ```
-edmDumpEventContent pf_only_reReco_MC_Sim.root | grep EcalRecHits 
-edmDumpEventContent pf_only_reReco_MC_Sim.root | grep particleFlow 
+edmDumpEventContent pf_only_reReco_MC.root | grep EcalRecHits 
+edmDumpEventContent pf_only_reReco_MC.root | grep particleFlow 
 ```
 
 An option is also prepared to run over the HCAL phase scan files, to save the uMNio word that encodes the phase delay. To run this:
@@ -136,7 +134,7 @@ tail -f Condor/logs/condor.log    # watch the log
 
 ## DiPion Gun MC samples
 
-DiPion gun GEN-SIM-RAW files (DR = angular separation, DT = time offset in ns) live in `/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/MC_Generation/CMSSW_15_0_6/src/`. Generated with `Run3` / `auto:phase1_2025_realistic` to match the SinglePiPt10 conditions. A dedicated config accepts `inputFiles` and `outputFile` as command-line arguments:
+DiPion gun GEN-SIM-RAW files (DR = angular separation, DT = time offset in ns) live in `/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/MC_Generation/CMSSW_15_0_6/src/`. Generated with `Run3` / `auto:phase1_2024_realistic`. The RECO config uses `auto:phase1_2025_realistic` — the 2025 conditions have tighter HCAL noise thresholds that suppress noise clusters present in 2024-simulated MC, giving a cleaner baseline for PF algorithm comparisons. The RECO config does **not** re-run the DIGI step. A dedicated config accepts `inputFiles` and `outputFile` as command-line arguments:
 ```
 cmsRun MyPFStudy_ReReco_DiPionGun_DIGI_RAW2DIGI_L1Reco_RECO.py \
     inputFiles=file:/path/to/DiPionGun_DR0.1_DT0.0_GEN-SIM-RAW.root \
@@ -156,15 +154,15 @@ To plot:
 ```
 
 ## MC cmsDriver command
-For MC, a slightly different python config is needed (MC specific GlobalTag, MC flag, no pp scenario). The two config generations are given below. For MC, add `outputCommands = cms.untracked.vstring('drop *', 'keep *_g4SimHits_*_*', 'keep *_genParticles_*_*')` in `process.out` to keep the sim hits and gen particles (for Simon's truth matching studies). 
+For MC, a slightly different python config is needed (MC specific GlobalTag, MC flag, no pp scenario). The config below produces `MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py`, starting from RAW2DIGI (no DIGI step) and keeping sim hits and gen particles for truth matching. Use `auto:phase1_2025_realistic` even for 2024-produced MC — the 2025 conditions have tighter HCAL noise thresholds that prevent spurious noise clusters.
 ```
-cmsDriver.py MyPFStudy_ReReco_MC_Sim \
+cmsDriver.py MyPFStudy_ReReco_MC \
     --mc --conditions auto:phase1_2025_realistic \
-    --step DIGI,RAW2DIGI,L1Reco,RECO --geometry DB \
+    --step RAW2DIGI,L1Reco,RECO --geometry DB \
     --era Run3 --filein file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/SinglePiPt10_step1_GEN-SIM-RAW.root \
-    --fileout file:pf_only_reReco_MC_Sim.root \
+    --fileout file:pf_only_reReco_MC.root \
     --eventcontent RECO --datatier RECO --process ReRECO \
-    --customise_commands="process.RECOoutput = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reReco_MC_Sim.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep *_horeco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*', 'keep *_g4SimHits_*_*', 'keep *_genParticles_*_*'))" \
+    --customise_commands="process.RECOoutput = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reReco_MC.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco_*_*', 'keep *_horeco_*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalPreshowerRecHit_EcalRecHitsES_*', 'keep *_g4SimHits_*_*', 'keep *_genParticles_*_*'))" \
     --no_exec -n 100
 ```
 
@@ -208,7 +206,7 @@ Change the root file listed in the plotting script as needed, and then run:
 ```
 scram b -j 8
 cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
-    inputFiles=file:pf_only_reReco_MC_Sim_standardPF.root \
+    inputFiles=file:pf_only_reReco_MC_standardPF.root \
     outputFile=pfObjectsNtuple_standardPF.root
 ```
 or with the bash script:
@@ -260,19 +258,19 @@ cd PF-Reco-Analysis
 
 **2. Save the pre-fix RECO output and produce a new one**
 ```bash
-mv pf_only_reReco_MC_Sim_standardPF.root pf_only_reReco_MC_Sim_standardPF_before.root
-cmsRun MyPFStudy_ReReco_MC_Sim_DIGI_RAW2DIGI_L1Reco_RECO.py
-mv pf_only_reReco_MC_Sim.root pf_only_reReco_MC_Sim_standardPF.root
+mv pf_only_reReco_MC_standardPF.root pf_only_reReco_MC_standardPF_before.root
+cmsRun MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py
+mv pf_only_reReco_MC.root pf_only_reReco_MC_standardPF.root
 ```
 
 **3. Run the ntupler on both**
 ```bash
 cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
-    inputFiles=file:pf_only_reReco_MC_Sim_standardPF_before.root \
+    inputFiles=file:pf_only_reReco_MC_standardPF_before.root \
     outputFile=pfObjectsNtuple_standardPF_before.root
 
 cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
-    inputFiles=file:pf_only_reReco_MC_Sim_standardPF.root \
+    inputFiles=file:pf_only_reReco_MC_standardPF.root \
     outputFile=pfObjectsNtuple_standardPF_after.root
 ```
 

@@ -96,7 +96,11 @@ process.options = cms.untracked.PSet(
     wantSummary = cms.untracked.bool(False)
 )
 
-# GlobalTag matching the Run3 / phase1_2025_realistic conditions (same as SinglePiPt10)
+# GlobalTag: use phase1_2025_realistic for RECO even though GEN-SIM-RAW was produced with
+# phase1_2024_realistic. The 2025 tag has tighter HCAL noise thresholds (tuned from 2024
+# running) that suppress low-energy noise rechits which would otherwise form spurious clusters
+# in 2024-simulated MC. Using 2024 RECO conditions gives ~12 noise clusters per event instead
+# of the expected 2 signal clusters.
 from Configuration.AlCa.GlobalTag import GlobalTag
 process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:phase1_2025_realistic', '')
 
