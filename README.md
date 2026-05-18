@@ -271,15 +271,30 @@ scram b -j8
 cd PF-Reco-Analysis
 ```
 
-**2. Produce the "before" RECO output** (revert fix temporarily, or use a saved pre-fix file)
+**2. Produce the "before" RECO output**
+
+Both versions are saved in `PFTestingAlgos/`. Copy the original, recompile, run:
 ```bash
-# Revert Basic2DGenericPFlowPositionCalc.cc, then scram b, then:
+cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src
+cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericPFlowPositionCalc_original.cc.edit \
+   RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericPFlowPositionCalc.cc
+scram b -j8
+cd PF-Reco-Analysis
 cmsRun MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py
 mv pf_only_reReco_MC.root pf_only_reReco_MC_standardPF_oldClusterTiming.root
-# Restore the fix and scram b again before step 3.
 ```
 
 **3. Produce the "after" RECO output**
+
+Restore the fix and recompile:
+```bash
+cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src
+cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericPFlowPositionCalc_timingFix.cc.edit \
+   RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericPFlowPositionCalc.cc
+scram b -j8
+cd PF-Reco-Analysis
+```
+Then:
 ```bash
 cmsRun MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py
 mv pf_only_reReco_MC.root pf_only_reReco_MC_standardPF.root
@@ -325,28 +340,32 @@ dasgoclient --query="file dataset=<dataset_from_above>" | head -3
 ```
 
 **2. Run re-reco and ntupler — before the fix**
-
-Revert `Basic2DGenericPFlowPositionCalc.cc` and `scram b`, then:
 ```bash
+cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src
+cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericPFlowPositionCalc_original.cc.edit \
+   RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericPFlowPositionCalc.cc
+scram b -j8
+cd PF-Reco-Analysis
 cmsRun MyPFStudy_ReReco_MC_condor.py \
     inputFiles="root://cms-xrd-global.cern.ch//<path_from_DAS>" \
     outputFile=pf_reco_physics_oldClusterTiming.root \
     maxEvents=500
-
 cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
     inputFiles=file:pf_reco_physics_oldClusterTiming.root \
     outputFile=pfObjectsNtuple_physics_before.root
 ```
 
 **3. Run re-reco and ntupler — after the fix**
-
-Restore the fix and `scram b`, then run with the same input file:
 ```bash
+cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src
+cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericPFlowPositionCalc_timingFix.cc.edit \
+   RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericPFlowPositionCalc.cc
+scram b -j8
+cd PF-Reco-Analysis
 cmsRun MyPFStudy_ReReco_MC_condor.py \
     inputFiles="root://cms-xrd-global.cern.ch//<path_from_DAS>" \
     outputFile=pf_reco_physics.root \
     maxEvents=500
-
 cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
     inputFiles=file:pf_reco_physics.root \
     outputFile=pfObjectsNtuple_physics_after.root
