@@ -72,6 +72,33 @@ def make_histos(tag):
         f"({tag}) cluster time vs. E^{{2}}-weighted mean rechit time;E^{{2}}-weighted rechit t [ns];cluster t [ns]",
         50, -20, 20, 50, -20, 20,
     )
+    # energy distribution of contaminated clusters (−998 to −10 ns).
+    # Before fix: shows which energy scale is pulled into the bogus range.
+    # After fix: should be empty.
+    hists["cl_energy_contaminated"] = ROOT.TH1F(
+        f"cl_energy_contaminated_{tag}",
+        "HCAL cluster energy (contaminated timing, -998 to -10 ns);E [GeV];Clusters",
+        50, 0, 50,
+    )
+    # energy distribution of clusters with valid timing (normalization reference)
+    hists["cl_energy_valid"] = ROOT.TH1F(
+        f"cl_energy_valid_{tag}",
+        "HCAL cluster energy (valid timing);E [GeV];Clusters",
+        50, 0, 50,
+    )
+    # eta distribution of contaminated clusters — shows which detector region is most affected
+    hists["cl_eta_contaminated"] = ROOT.TH1F(
+        f"cl_eta_contaminated_{tag}",
+        "HCAL cluster #eta (contaminated timing, -998 to -10 ns);#eta;Clusters",
+        50, -3.0, 3.0,
+    )
+    # cluster time (valid) vs cluster energy 2D.
+    # Checks for energy-dependent bias after the fix; should be flat across all energies.
+    hists["cl_time_vs_energy"] = ROOT.TH2F(
+        f"cl_time_vs_energy_{tag}",
+        f"({tag}) cluster time (valid) vs. energy;E [GeV];cluster t [ns]",
+        50, 0, 50, 60, -15, 15,
+    )
     return hists
 
 
@@ -84,16 +111,22 @@ def fill_histos(tree, hists):
             if 0 <= rh_cidx < nclust:
                 rh_data[rh_cidx].append((rh_t, rh_e))
 
-        for cidx, (cl_t, cl_nrh) in enumerate(zip(ev.hcal_time, ev.hcal_nRecHits)):
+        for cidx, (cl_t, cl_e, cl_eta, cl_nrh) in enumerate(
+            zip(ev.hcal_time, ev.hcal_energy, ev.hcal_eta, ev.hcal_nRecHits)
+        ):
             hists["cl_time_full"].Fill(cl_t)
             hists["cl_nrechits"].Fill(cl_nrh)
 
             # contaminated range: between sentinel and physics range
             if -998 < cl_t < -10:
                 hists["cl_time_contaminated"].Fill(cl_t)
+                hists["cl_energy_contaminated"].Fill(cl_e)
+                hists["cl_eta_contaminated"].Fill(cl_eta)
 
             if not is_sentinel(cl_t):
                 hists["cl_time_zoom"].Fill(cl_t)
+                hists["cl_energy_valid"].Fill(cl_e)
+                hists["cl_time_vs_energy"].Fill(cl_e, cl_t)
 
             # rechit-level stats for this cluster
             data = rh_data[cidx]
@@ -226,6 +259,10 @@ def main():
     # Rechit-level — informational only, identical before/after by design
     overlay("rechit_invalid_frac",   "Fraction of invalid rechits per cluster (rechit-level, same before/after)")
     overlay("cl_nrechits",           "Rechits per cluster")
+    # Energy/eta of contaminated clusters: before has entries, after should be empty
+    overlay("cl_energy_contaminated", "HCAL cluster energy (contaminated timing, -998 to -10 ns)")
+    overlay("cl_energy_valid",        "HCAL cluster energy (valid timing)")
+    overlay("cl_eta_contaminated",    "HCAL cluster #eta (contaminated timing, -998 to -10 ns)")
 
     # 2D cluster time vs mean valid rechit time — drawn separately for before and after
     # Before fix: contaminated clusters appear with cluster t << mean rechit t (off-diagonal)
@@ -240,6 +277,14 @@ def main():
         diag.SetLineStyle(2)
         diag.Draw()
         c2d.Print(pdf)
+
+    # 2D cluster time vs cluster energy — drawn separately for before and after
+    # Checks that the fix introduces no energy-dependent timing bias
+    for tag, hd in [("before", hb), ("after", ha)]:
+        c2e = ROOT.TCanvas(f"c2e_{tag}", hd["cl_time_vs_energy"].GetTitle(), 800, 700)
+        c2e.SetRightMargin(0.13)
+        hd["cl_time_vs_energy"].Draw("COLZ")
+        c2e.Print(pdf)
 
     ROOT.TCanvas().Print(pdf + "]")  # close PDF
     print(f"Saved {pdf}")

@@ -3,8 +3,8 @@
 cmsenv
 
 INPUT_DIR="/eos/user/g/gkopp/PF_PhaseScan"
-OUTPUT_DIR="/eos/user/g/gkopp/PF_PhaseScan"
-OUTPUT_FILE="${OUTPUT_DIR}/pfObjectsNtuple_phaseScan.root"
+EOS_OUTPUT="root://eosuser.cern.ch//eos/user/g/gkopp/PF_PhaseScan/pfObjectsNtuple_phaseScan.root"
+LOCAL_OUTPUT="/tmp/pfObjectsNtuple_phaseScan.root"
 
 # Build comma-separated list of xrootd input files
 FILES=$(ls ${INPUT_DIR}/pf_only_reReco_phaseScan_job*.root 2>/dev/null \
@@ -18,8 +18,11 @@ fi
 
 NFILES=$(echo "$FILES" | tr ',' '\n' | wc -l)
 echo "Found ${NFILES} phase scan file(s)"
-echo "Output: ${OUTPUT_FILE}"
+echo "Output: ${EOS_OUTPUT}"
 
 cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
     inputFiles="${FILES}" \
-    outputFile=${OUTPUT_FILE}
+    outputFile=${LOCAL_OUTPUT}
+
+echo "Copying output to EOS..."
+xrdcp -f ${LOCAL_OUTPUT} ${EOS_OUTPUT} && rm ${LOCAL_OUTPUT}

@@ -247,26 +247,48 @@ With the bash script:
 
 ## Testing the HCAL Cluster Timing Fix
 
-`Basic2DGenericPFlowPositionCalc.cc` was edited to skip rechits with `time == -999` (the invalid sentinel) when computing the energy-weighted cluster time, and to set cluster time to `-999` when all constituent rechits are invalid. To validate a before/after change to this code:
+`Basic2DGenericPFlowPositionCalc.cc` was edited to skip rechits with `time == -999` (the MAHI invalid sentinel) when computing the E²-weighted cluster time, and to set cluster time to `-999` when all constituent rechits are invalid. This prevents mixed-validity clusters from reporting a bogus average pulled into the −500 to −10 ns range.
 
-**1. Build**
+Two validation workflows are documented below: a quick pion gun check and a higher-statistics physics sample check via Condor.
+
+`Plotting/compare_timing_fix.py` is used for both. It produces:
+- `hcal_time` full range (log y) — shows the population at exactly −999 and any contaminated clusters
+- `hcal_time` contaminated range (−998 to −10 ns) — the key diagnostic; should be empty after the fix
+- `hcal_time` zoom (valid clusters, −20 to +20 ns) — shows clusters migrating into the physics range after fix
+- rechit invalid fraction per cluster and rechits per cluster — informational, identical before/after
+- 2D cluster time vs E²-weighted mean valid-rechit time — off-diagonal before fix, on-diagonal after
+- Cluster energy and η for contaminated-timing clusters — shows what energy scale and detector region are affected
+- 2D cluster time (valid) vs cluster energy — checks no energy-dependent bias is introduced
+
+### Pion Gun Validation (SinglePiPt10, interactive)
+
+Quick check using the SinglePiPt10 GEN-SIM-RAW sample run through `MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py` (100 events, no pileup). Because there is only one pion per event, HCAL occupancy is low and ~80% of clusters have all-invalid rechit timing; the fix is visible as contaminated clusters (−500 to −10 ns) disappearing.
+
+**1. Build the fix**
 ```bash
 cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src
 scram b -j8
 cd PF-Reco-Analysis
 ```
 
-**2. Save the pre-fix RECO output and produce a new one**
+**2. Produce the "before" RECO output** (revert fix temporarily, or use a saved pre-fix file)
 ```bash
-mv pf_only_reReco_MC_standardPF.root pf_only_reReco_MC_standardPF_before.root
+# Revert Basic2DGenericPFlowPositionCalc.cc, then scram b, then:
+cmsRun MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py
+mv pf_only_reReco_MC.root pf_only_reReco_MC_standardPF_oldClusterTiming.root
+# Restore the fix and scram b again before step 3.
+```
+
+**3. Produce the "after" RECO output**
+```bash
 cmsRun MyPFStudy_ReReco_MC_RAW2DIGI_L1Reco_RECO.py
 mv pf_only_reReco_MC.root pf_only_reReco_MC_standardPF.root
 ```
 
-**3. Run the ntupler on both**
+**4. Run the ntupler on both**
 ```bash
 cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
-    inputFiles=file:pf_only_reReco_MC_standardPF_before.root \
+    inputFiles=file:pf_only_reReco_MC_standardPF_oldClusterTiming.root \
     outputFile=pfObjectsNtuple_standardPF_before.root
 
 cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
@@ -274,7 +296,7 @@ cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
     outputFile=pfObjectsNtuple_standardPF_after.root
 ```
 
-**4. Plot the comparison**
+**5. Plot**
 ```bash
 python3 Plotting/compare_timing_fix.py \
     --before pfObjectsNtuple_standardPF_before.root \
@@ -282,7 +304,91 @@ python3 Plotting/compare_timing_fix.py \
     --output timing_fix_comparison.pdf
 ```
 
-The script (`Plotting/compare_timing_fix.py`) produces five plots: `hcal_time` full range (log y), `hcal_time` zoom on valid clusters, fraction of clusters with `time == -999`, fraction of invalid rechits per cluster, and a 2D scatter of cluster time vs. mean valid rechit time. It also prints a summary line counting how many clusters changed to `time == -999` (those that previously had a bogus average contaminated by invalid hits).
+### Physics Sample Validation (TTbar or QCD, Condor)
+
+Physics samples have higher HCAL occupancy: more clusters per event, more clusters with mixed-validity rechits (some rechits have valid timing, some return −999), and realistic jet activity. These give higher statistics on the contaminated-timing population and are more representative of the samples used in CMS analyses.
+
+`MyPFStudy_ReReco_MC_condor.py` is a VarParsing-enabled version of the MC re-reco config that accepts `inputFiles`, `outputFile`, and `maxEvents` on the command line. `Condor/run_timingFix_job.sh` runs re-reco plus ntupling in a single job and writes only the ntuple to EOS. `Condor/submit_timingFix.sh` submits one job per input file.
+
+**1. Find GEN-SIM-DIGI-RAW files on DAS**
+
+Requires a valid grid proxy:
+```bash
+voms-proxy-init --rfc --voms cms --valid 172:00
+```
+
+```bash
+# TTbar dilepton, Run3Summer23 BPix pileup:
+dasgoclient --query="file dataset=/TTto2L2Nu_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer23BPixDRPremix-130X_mcRun3_2023_realistic_postBPix_v2-v2/GEN-SIM-DIGI-RAW" \
+    | head -20 \
+    | sed 's|^/store/|root://cms-xrd-global.cern.ch//store/|' \
+    > input_files_ttbar.txt
+
+# Or QCD multijet:
+dasgoclient --query="file dataset=/QCD_PT-470to600_TuneCP5_13p6TeV_pythia8/Run3Summer23BPixDRPremix-130X_mcRun3_2023_realistic_postBPix_v2-v1/GEN-SIM-DIGI-RAW" \
+    | head -20 \
+    | sed 's|^/store/|root://cms-xrd-global.cern.ch//store/|' \
+    > input_files_qcd.txt
+```
+
+**2. Prepare two CMSSW builds — one without the fix ("before"), one with ("after")**
+
+The Condor wrapper takes the CMSSW base directory as an argument, so the same scripts work for both variants:
+
+```bash
+# Option A: two separate checkouts — cleanest approach
+#   /path/to/CMSSW_15_0_6_before   original Basic2DGenericPFlowPositionCalc.cc, scram b done
+#   /path/to/CMSSW_15_0_6          with the timing fix (current area)
+
+# Option B: single area, sequential submission
+#   1. Revert Basic2DGenericPFlowPositionCalc.cc; scram b; submit "before" jobs; wait
+#   2. Restore fix; scram b; submit "after" jobs
+```
+
+**3. Create EOS output directories**
+```bash
+eos mkdir -p /eos/user/g/gkopp/timingFix/before
+eos mkdir -p /eos/user/g/gkopp/timingFix/after
+```
+
+**4. Submit "before" jobs**
+```bash
+cd Condor
+# Test with one file first:
+bash submit_timingFix.sh -t before ../input_files_ttbar.txt \
+    root://eosuser.cern.ch//eos/user/g/gkopp/timingFix/before \
+    /path/to/CMSSW_15_0_6_before 200
+
+# Submit all:
+bash submit_timingFix.sh before ../input_files_ttbar.txt \
+    root://eosuser.cern.ch//eos/user/g/gkopp/timingFix/before \
+    /path/to/CMSSW_15_0_6_before 200
+```
+
+**5. Submit "after" jobs** (once "before" build is ready or sequentially)
+```bash
+bash submit_timingFix.sh after ../input_files_ttbar.txt \
+    root://eosuser.cern.ch//eos/user/g/gkopp/timingFix/after \
+    /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6 200
+```
+
+Monitor with `condor_q` / `condor_q -better-analyze <jobid>`.
+
+**6. Merge ntuples**
+```bash
+hadd pfObjectsNtuple_ttbar_before.root /eos/user/g/gkopp/timingFix/before/pfObjectsNtuple_job*.root
+hadd pfObjectsNtuple_ttbar_after.root  /eos/user/g/gkopp/timingFix/after/pfObjectsNtuple_job*.root
+```
+
+**7. Plot**
+```bash
+python3 Plotting/compare_timing_fix.py \
+    --before pfObjectsNtuple_ttbar_before.root \
+    --after  pfObjectsNtuple_ttbar_after.root \
+    --output timing_fix_comparison_ttbar.pdf
+```
+
+The contaminated-timing plots (cluster time in −998 to −10 ns, and the energy/η distributions of those clusters) show the fix working across all cluster energies and η values with no detector-region-specific bias.
 
 ## Phase Scan Timing Plots
 To plot PF cluster time vs phase delay (`laserType`) from the phase scan ntuple:
