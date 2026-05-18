@@ -304,88 +304,60 @@ python3 Plotting/compare_timing_fix.py \
     --output timing_fix_comparison.pdf
 ```
 
-### Physics Sample Validation (TTbar or QCD, Condor)
+### Physics Sample Validation (TTbar or QCD RelVal, interactive)
 
-Physics samples have higher HCAL occupancy: more clusters per event, more clusters with mixed-validity rechits (some rechits have valid timing, some return −999), and realistic jet activity. These give higher statistics on the contaminated-timing population and are more representative of the samples used in CMS analyses.
+Physics samples have higher HCAL occupancy: more clusters per event, more clusters with mixed-validity rechits, and realistic jet activity. These give better statistics on the contaminated-timing population than the single-pion gun.
 
-`MyPFStudy_ReReco_MC_condor.py` is a VarParsing-enabled version of the MC re-reco config that accepts `inputFiles`, `outputFile`, and `maxEvents` on the command line. `Condor/run_timingFix_job.sh` runs re-reco plus ntupling in a single job and writes only the ntuple to EOS. `Condor/submit_timingFix.sh` submits one job per input file.
+`MyPFStudy_ReReco_MC_condor.py` is a VarParsing-enabled re-reco config that accepts `inputFiles`, `outputFile`, and `maxEvents` on the command line — no file editing needed.
 
 **1. Find GEN-SIM-DIGI-RAW files on DAS**
 
-Requires a valid grid proxy:
+RelVal samples are the most reliable since they are generated for each CMSSW release:
 ```bash
 voms-proxy-init --rfc --voms cms --valid 172:00
+dasgoclient --query="dataset=/RelValTTbar_14TeV/CMSSW_15_0_6*/GEN-SIM-DIGI-RAW"
+dasgoclient --query="dataset=/RelValQCD_Pt15To7000_Flat_14TeV/CMSSW_15_0_6*/GEN-SIM-DIGI-RAW"
 ```
 
+Pick one dataset from the output, then get a file path:
 ```bash
-# TTbar dilepton, Run3Summer23 BPix pileup:
-dasgoclient --query="file dataset=/TTto2L2Nu_TuneCP5_13p6TeV_powheg-pythia8/Run3Summer23BPixDRPremix-130X_mcRun3_2023_realistic_postBPix_v2-v2/GEN-SIM-DIGI-RAW" \
-    | head -20 \
-    | sed 's|^/store/|root://cms-xrd-global.cern.ch//store/|' \
-    > input_files_ttbar.txt
-
-# Or QCD multijet:
-dasgoclient --query="file dataset=/QCD_PT-470to600_TuneCP5_13p6TeV_pythia8/Run3Summer23BPixDRPremix-130X_mcRun3_2023_realistic_postBPix_v2-v1/GEN-SIM-DIGI-RAW" \
-    | head -20 \
-    | sed 's|^/store/|root://cms-xrd-global.cern.ch//store/|' \
-    > input_files_qcd.txt
+dasgoclient --query="file dataset=<dataset_from_above>" | head -3
 ```
 
-**2. Prepare two CMSSW builds — one without the fix ("before"), one with ("after")**
+**2. Run re-reco and ntupler — before the fix**
 
-The Condor wrapper takes the CMSSW base directory as an argument, so the same scripts work for both variants:
-
+Revert `Basic2DGenericPFlowPositionCalc.cc` and `scram b`, then:
 ```bash
-# Option A: two separate checkouts — cleanest approach
-#   /path/to/CMSSW_15_0_6_before   original Basic2DGenericPFlowPositionCalc.cc, scram b done
-#   /path/to/CMSSW_15_0_6          with the timing fix (current area)
+cmsRun MyPFStudy_ReReco_MC_condor.py \
+    inputFiles="root://cms-xrd-global.cern.ch//<path_from_DAS>" \
+    outputFile=pf_reco_physics_oldClusterTiming.root \
+    maxEvents=500
 
-# Option B: single area, sequential submission
-#   1. Revert Basic2DGenericPFlowPositionCalc.cc; scram b; submit "before" jobs; wait
-#   2. Restore fix; scram b; submit "after" jobs
+cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
+    inputFiles=file:pf_reco_physics_oldClusterTiming.root \
+    outputFile=pfObjectsNtuple_physics_before.root
 ```
 
-**3. Create EOS output directories**
+**3. Run re-reco and ntupler — after the fix**
+
+Restore the fix and `scram b`, then run with the same input file:
 ```bash
-eos mkdir -p /eos/user/g/gkopp/timingFix/before
-eos mkdir -p /eos/user/g/gkopp/timingFix/after
+cmsRun MyPFStudy_ReReco_MC_condor.py \
+    inputFiles="root://cms-xrd-global.cern.ch//<path_from_DAS>" \
+    outputFile=pf_reco_physics.root \
+    maxEvents=500
+
+cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
+    inputFiles=file:pf_reco_physics.root \
+    outputFile=pfObjectsNtuple_physics_after.root
 ```
 
-**4. Submit "before" jobs**
-```bash
-cd Condor
-# Test with one file first:
-bash submit_timingFix.sh -t before ../input_files_ttbar.txt \
-    root://eosuser.cern.ch//eos/user/g/gkopp/timingFix/before \
-    /path/to/CMSSW_15_0_6_before 200
-
-# Submit all:
-bash submit_timingFix.sh before ../input_files_ttbar.txt \
-    root://eosuser.cern.ch//eos/user/g/gkopp/timingFix/before \
-    /path/to/CMSSW_15_0_6_before 200
-```
-
-**5. Submit "after" jobs** (once "before" build is ready or sequentially)
-```bash
-bash submit_timingFix.sh after ../input_files_ttbar.txt \
-    root://eosuser.cern.ch//eos/user/g/gkopp/timingFix/after \
-    /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6 200
-```
-
-Monitor with `condor_q` / `condor_q -better-analyze <jobid>`.
-
-**6. Merge ntuples**
-```bash
-hadd pfObjectsNtuple_ttbar_before.root /eos/user/g/gkopp/timingFix/before/pfObjectsNtuple_job*.root
-hadd pfObjectsNtuple_ttbar_after.root  /eos/user/g/gkopp/timingFix/after/pfObjectsNtuple_job*.root
-```
-
-**7. Plot**
+**4. Plot**
 ```bash
 python3 Plotting/compare_timing_fix.py \
-    --before pfObjectsNtuple_ttbar_before.root \
-    --after  pfObjectsNtuple_ttbar_after.root \
-    --output timing_fix_comparison_ttbar.pdf
+    --before pfObjectsNtuple_physics_before.root \
+    --after  pfObjectsNtuple_physics_after.root \
+    --output timing_fix_comparison_physics.pdf
 ```
 
 The contaminated-timing plots (cluster time in −998 to −10 ns, and the energy/η distributions of those clusters) show the fix working across all cluster energies and η values with no detector-region-specific bias.
