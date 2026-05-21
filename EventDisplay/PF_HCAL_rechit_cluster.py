@@ -3,42 +3,35 @@ import awkward as ak
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
-
-###############################################################################
-# Load ROOT file
-###############################################################################
-
-# file = uproot.open("../../Downloads/pfObjectsNtuple.root") # path to your root file from the ntupler
-# directory = file["pfObjectsNtupler"] 
-file = uproot.open("../../Downloads/pfObjectsNtuple_tdc.root") # path to your root file from the ntupler
-directory = file["pfObjectsNtuplertdc"] 
-tree = directory["pfTree"]
-
-# HCAL clusters
-hcal_eta    = tree["hcal_eta"].array(library="ak")
-hcal_phi    = tree["hcal_phi"].array(library="ak")
-hcal_energy = tree["hcal_energy"].array(library="ak")
-# hcal_time   = tree["hcal_time"].array(library="ak")
-hcal_depth  = tree["hcal_depth"].array(library="ak")
-
-# HBHE rechits
-rh_eta    = tree["hbhe_rechit_eta"].array(library="ak")
-rh_phi    = tree["hbhe_rechit_phi"].array(library="ak")
-rh_energy = tree["hbhe_rechit_energy"].array(library="ak")
-# rh_time   = tree["hbhe_rechit_time"].array(library="ak")
-rh_time   = tree["hbhe_rechit_tdc"].array(library="ak")
-rh_depth  = tree["hbhe_rechit_depth"].array(library="ak")
-rh_clusterIndex = tree["hbheRechit_clusterIdx"].array(library="ak")
-
+import argparse
 ###############################################################################
 # HCAL Event Display
 ###############################################################################
 
 class HCALEventDisplay:
-    def __init__(self, start_event=0):
+    def __init__(self, data, start_event=0):
+        self.data = data
         self.event = start_event
         self.cluster_index = 0
+        event = self.event
+        
+        self.hcal_eta    = self.data['hcal_eta']
+        self.hcal_phi    = self.data['hcal_phi']
+        self.hcal_energy = self.data['hcal_energy']
+        self.hcal_time   = self.data['hcal_time']
+        self.hcal_depth  = self.data['hcal_depth']
 
+        self.rh_eta      = self.data['rh_eta']
+        self.rh_phi      = self.data['rh_phi']
+        self.rh_energy   = self.data['rh_energy']
+        self.rh_time     = self.data['rh_time']  
+        #self.nClusters = len(self.hcal_eta[event])
+        self.rh_depth    = self.data['rh_depth']
+        self.rh_clusterIndex = self.data['rh_clusterIndex']
+
+        ############################################################################
+        # Set up figure and axes
+        ############################################################################
         # Figure with 2x4 subplots (top row is energy, lower is timing)
         self.fig = plt.figure(figsize=(18, 10))
         self.ax = [self.fig.add_subplot(2, 4, i+1) for i in range(8)]
@@ -85,26 +78,26 @@ class HCALEventDisplay:
     # Navigation
     ############################################################################
 
-    def next_event(self, event):
-        self.event = (self.event + 1) % len(hcal_eta)
+    def next_event(self,_event):
+        self.event = (self.event + 1) % len(self.hcal_eta)
         self.cluster_index = 0
         self.draw_display()
 
-    def prev_event(self, event):
-        self.event = (self.event - 1) % len(hcal_eta)
+    def prev_event(self,_event):
+        self.event = (self.event - 1) % len(self.hcal_eta)
         self.cluster_index = 0
         self.draw_display()
 
-    def next_cluster(self, event):
-        nClusters = len(hcal_eta[self.event])
+    def next_cluster(self,_event):
+        nClusters = len(self.hcal_eta[self.event])
         if nClusters == 0:
             print("No clusters in this event.")
             return
         self.cluster_index = (self.cluster_index + 1) % nClusters
         self.draw_display()
 
-    def prev_cluster(self, event):
-        nClusters = len(hcal_eta[self.event])
+    def prev_cluster(self,_event):
+        nClusters = len(self.hcal_eta[self.event])
         if nClusters == 0:
             print("No clusters in this event.")
             return
@@ -116,8 +109,7 @@ class HCALEventDisplay:
     ############################################################################
 
     def draw_display(self):
-        event = self.event
-        nClusters = len(hcal_eta[event])
+        nClusters = len(self.hcal_eta[self.event])
 
         # Add cluster summary text (top-right of figure)
         # Remove old annotation if it exists
@@ -127,14 +119,15 @@ class HCALEventDisplay:
 
         # only plot clusters over 2 GeV 
         counter = 0
-        energies = ak.to_numpy(hcal_energy[event])
+        energies = ak.to_numpy(self.hcal_energy[self.event])
         valid_clusters = np.where(energies > 2.0)[0]
         for i in valid_clusters:
             summary_lines = (
                 f"{i:2d}: "
-                f"E={float(hcal_energy[event][i]):5.2f}  "
-                f"$\eta$={float(hcal_eta[event][i]):+5.2f}  "
-                f"$\phi$={float(hcal_phi[event][i]):+5.2f}"
+                f"E={float(self.hcal_energy[self.event][i]):5.2f}  "
+                f"$\eta$={float(self.hcal_eta[self.event][i]):+5.2f}  "
+                f"$\phi$={float(self.hcal_phi[self.event][i]):+5.2f}  "
+                f"t={float(self.hcal_time[self.event][i]):+6.2f} ns"
             )
 
             # make current cluster bolded
@@ -167,7 +160,7 @@ class HCALEventDisplay:
             for axx in self.ax:
                 axx.text(0.5, 0.5, "No clusters in this event",
                          ha='center', va='center', fontsize=14)
-            self.fig.suptitle(f"Event {event}: No HCAL Clusters", fontsize=16)
+            self.fig.suptitle(f"Event {self.event}: No HCAL Clusters", fontsize=16)
             self.fig.canvas.draw_idle()
             return
 
@@ -175,12 +168,12 @@ class HCALEventDisplay:
         # ---------------------------------------------------------
         # Skip clusters with energy < 2 GeV
         # ---------------------------------------------------------
-        energies = ak.to_numpy(hcal_energy[event])
+        energies = ak.to_numpy(self.hcal_energy[self.event])
         valid = np.where(energies > 2.0)[0]
 
         if len(valid) == 0:
             # No clusters above threshold in this event
-            self.fig.suptitle(f"Event {event}: No clusters with E > 1 GeV", fontsize=16)
+            self.fig.suptitle(f"Event {self.event}: No clusters with E > 1 GeV", fontsize=16)
             self.fig.canvas.draw_idle()
             return
 
@@ -199,17 +192,17 @@ class HCALEventDisplay:
             self.cluster_index = 0
 
         # Cluster center
-        c_eta = float(hcal_eta[event][idx])
-        c_phi = float(hcal_phi[event][idx])
-        c_depth = float(hcal_depth[event][idx])
+        c_eta = float(self.hcal_eta[self.event][idx])
+        c_phi = float(self.hcal_phi[self.event][idx])
+        c_depth = float(self.hcal_depth[self.event][idx])
 
         # Select HBHE rechits for this cluster
-        mask_cluster = (rh_clusterIndex[event] == idx)
-        eta   = ak.to_numpy(rh_eta[event][mask_cluster])
-        phi   = ak.to_numpy(rh_phi[event][mask_cluster])
-        depth = ak.to_numpy(rh_depth[event][mask_cluster])
-        energy = ak.to_numpy(rh_energy[event][mask_cluster])
-        time   = ak.to_numpy(rh_time[event][mask_cluster])
+        mask_cluster = (self.rh_clusterIndex[self.event] == idx)
+        eta   = ak.to_numpy(self.rh_eta[self.event][mask_cluster])
+        phi   = ak.to_numpy(self.rh_phi[self.event][mask_cluster])
+        depth = ak.to_numpy(self.rh_depth[self.event][mask_cluster])
+        energy = ak.to_numpy(self.rh_energy[self.event][mask_cluster])
+        time   = ak.to_numpy(self.rh_time[self.event][mask_cluster])
 
         # Geometry cut: deltaEta/Phi < 0.4
         # should already be done based on rechits that match to the cluster but in case:
@@ -223,26 +216,49 @@ class HCALEventDisplay:
         energy = energy[mask_geo]
         time   = time[mask_geo]
 
+        # Mask rechits with invalid sentinel time (-999)
+        valid_time = time > -100
+
         # Determine color scale
         vminE, vmaxE = (np.min(energy), np.max(energy)) if len(energy) > 0 else (0,1)
-        vminT, vmaxT = (np.min(time), np.max(time)) if len(time) > 0 else (0,1)
+        valid_t_vals = time[valid_time]
+        if len(valid_t_vals) > 0:
+            vminT, vmaxT = np.min(valid_t_vals), np.max(valid_t_vals)
+            if vmaxT - vminT < 1.0:  # degenerate range → center on cluster time ±0.5 ns
+                mid = (vminT + vmaxT) / 2
+                vminT, vmaxT = mid - 0.5, mid + 0.5
+        else:
+            vminT, vmaxT = -1.0, 1.0
 
         # Draw scatter and cluster outlines
+        scE_sample = None
+        scT_sample = None
         for d in [1,2,3,4]:
             axE = self.ax[d-1]
             axT = self.ax[d-1+4]
 
             hit = (depth == d)
+            hit_invalid = hit & ~valid_time
+            hit_t = hit & valid_time
 
             # Draw hits
             if np.sum(hit) > 0:
-                axE.scatter(eta[hit], phi[hit], s=80, c=energy[hit],
-                            cmap="viridis", vmin=vminE, vmax=vmaxE)
-                axT.scatter(eta[hit], phi[hit], s=80, c=time[hit],
-                            cmap="plasma", vmin=vminT, vmax=vmaxT)
+                sc = axE.scatter(eta[hit], phi[hit], s=80, c=energy[hit],
+                                 cmap="viridis", vmin=vminE, vmax=vmaxE)
+                scE_sample = sc
             else:
                 axE.text(0.5, 0.5, "No hits", ha='center', va='center')
+
+            if np.sum(hit) == 0:
                 axT.text(0.5, 0.5, "No hits", ha='center', va='center')
+            else:
+                if np.sum(hit_invalid) > 0:
+                    axT.scatter(eta[hit_invalid], phi[hit_invalid], s=80,
+                                c="grey", marker='x', zorder=2)
+                if np.sum(hit_t) > 0:
+                    sc = axT.scatter(eta[hit_t], phi[hit_t], s=80, c=time[hit_t],
+                                     cmap="plasma", vmin=vminT, vmax=vmaxT, zorder=3)
+                    scT_sample = sc
 
             # Cluster outline
             if c_depth == d or (c_depth < d and c_depth > d-1) or (c_depth > d and c_depth < d+1): # draw cluster at the closest depth
@@ -259,29 +275,83 @@ class HCALEventDisplay:
             axx.set_ylim(c_phi - 0.27, c_phi + 0.27)
 
         # Add/update colorbars
-        scE_sample = axE.collections[0] if np.sum(hit)>0 else axE.scatter([], [], cmap="viridis")
-        scT_sample = axT.collections[0] if np.sum(hit)>0 else axT.scatter([], [], cmap="plasma")
+        if scE_sample is None:
+            scE_sample = self.ax[0].scatter([], [], c=[], cmap="viridis", vmin=vminE, vmax=vmaxE)
+        if scT_sample is None:
+            scT_sample = self.ax[4].scatter([], [], c=[], cmap="plasma", vmin=vminT, vmax=vmaxT)
 
         if self.cbar_energy is None:
             self.cbar_energy = self.fig.colorbar(scE_sample, ax=self.ax[0:4], location="right", fraction=0.02)
             self.cbar_energy.set_label("Energy [GeV]")
         else:
-            self.cbar_energy.mappable.set_array(energy)
             self.cbar_energy.mappable.set_clim(vminE, vmaxE)
 
         if self.cbar_time is None:
             self.cbar_time = self.fig.colorbar(scT_sample, ax=self.ax[4:8], location="right", fraction=0.02)
-            self.cbar_time.set_label("Time [TDC codes]")
-        else:
-            self.cbar_time.mappable.set_array(time)
+            self.cbar_time.set_label("Time [ns]")
+        elif len(valid_t_vals) > 0:
             self.cbar_time.mappable.set_clim(vminT, vmaxT)
 
-        self.fig.suptitle(f"Event {event} — Cluster {idx}, cluster depth {c_depth}", fontsize=16)
+        self.fig.suptitle(f"Event {self.event} — Cluster {idx}, cluster depth {c_depth}", fontsize=16)
         self.fig.canvas.draw_idle()
 
 
-###############################################################################
-# Run
-###############################################################################
-# Example: start at event 5
-viewer = HCALEventDisplay(start_event=5)
+def main():
+
+    ###############################################################################
+    # Creates a parser for command line arguments
+    ###############################################################################
+    parser = argparse.ArgumentParser(description="HCAL Event Display")
+    
+    # Add a required positional argument
+    parser.add_argument("filename", type=str, nargs="?", help="Path to the ROOT file from the ntupler",default="pfObjectsNtuple_tdc.root")
+    args = parser.parse_args()
+
+    ###############################################################################
+    # Load ROOT file
+    ###############################################################################
+
+    # file = uproot.open("../../Downloads/pfObjectsNtuple.root") # path to your root file from the ntupler
+    # directory = file["pfObjectsNtupler"] 
+    file = uproot.open(args.filename) # path to your root file from the ntupler
+    # directory = file["pfObjectsNtuplertdc"] 
+    directory = file["pfObjectsNtupler"] 
+    tree = directory["pfTree"]
+
+    # HCAL clusters
+    hcal_eta    = tree["hcal_eta"].array(library="ak")
+    hcal_phi    = tree["hcal_phi"].array(library="ak")
+    hcal_energy = tree["hcal_energy"].array(library="ak")
+    hcal_time   = tree["hcal_time"].array(library="ak")
+    hcal_depth  = tree["hcal_depth"].array(library="ak")
+
+    # HBHE rechits
+    rh_eta    = tree["hbhe_rechit_eta"].array(library="ak")
+    rh_phi    = tree["hbhe_rechit_phi"].array(library="ak")
+    rh_energy = tree["hbhe_rechit_energy"].array(library="ak")
+    rh_time   = tree["hbhe_rechit_time"].array(library="ak")
+    # rh_time   = tree["hbhe_rechit_tdc"].array(library="ak")
+    rh_depth  = tree["hbhe_rechit_depth"].array(library="ak")
+    # rh_clusterIndex = tree["hbheRechit_clusterIdx"].array(library="ak")
+    rh_clusterIndex = tree["hbhe_rechit_clusterIndex"].array(library="ak")
+
+    data = dict(
+        hcal_eta=hcal_eta,
+        hcal_phi=hcal_phi,
+        hcal_energy=hcal_energy,
+        hcal_time=hcal_time,
+        hcal_depth=hcal_depth,
+        rh_eta=rh_eta,
+        rh_phi=rh_phi,
+        rh_energy=rh_energy,
+        rh_time=rh_time,
+        rh_depth=rh_depth,
+        rh_clusterIndex=rh_clusterIndex)
+    ###############################################################################
+    # Start Event Display
+    ###############################################################################
+    # Example: start at event 5
+    viewer = HCALEventDisplay(data, start_event=20)
+
+if __name__ == "__main__":
+    main()

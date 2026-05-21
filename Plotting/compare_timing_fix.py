@@ -49,9 +49,9 @@ def make_histos(tag):
         "HCAL cluster time (contaminated range);t [ns];Clusters",
         200, -998, -10,
     )
-    # cluster time (zoom in on the physics range)
+    # cluster time (zoom in on the physics range); 0.5 ns bins
     hists["cl_time_zoom"] = ROOT.TH1F(
-        f"cl_time_zoom_{tag}", "HCAL cluster time (valid only);t [ns];Clusters", 100, -20, 20
+        f"cl_time_zoom_{tag}", "HCAL cluster time (valid only);t [ns];Clusters", 40, -20, 20
     )
     # number of rechits per cluster
     hists["cl_nrechits"] = ROOT.TH1F(
@@ -70,7 +70,7 @@ def make_histos(tag):
     hists["cl_vs_rh_time"] = ROOT.TH2F(
         f"cl_vs_rh_time_{tag}",
         f"({tag}) cluster time vs. E^{{2}}-weighted mean rechit time;E^{{2}}-weighted rechit t [ns];cluster t [ns]",
-        50, -20, 20, 50, -20, 20,
+        40, -20, 20, 40, -20, 20,
     )
     # energy distribution of contaminated clusters (−998 to −10 ns).
     # Before fix: shows which energy scale is pulled into the bogus range.
@@ -97,7 +97,7 @@ def make_histos(tag):
     hists["cl_time_vs_energy"] = ROOT.TH2F(
         f"cl_time_vs_energy_{tag}",
         f"({tag}) cluster time (valid) vs. energy;E [GeV];cluster t [ns]",
-        50, 0, 50, 60, -15, 15,
+        50, 0, 50, 30, -15, 15,
     )
     return hists
 
