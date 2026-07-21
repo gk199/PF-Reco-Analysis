@@ -3,7 +3,7 @@
 cmsenv
 
 INPUT_DIR="/eos/user/g/gkopp/PF_PhaseScan"
-EOS_OUTPUT="root://eosuser.cern.ch//eos/user/g/gkopp/PF_PhaseScan/pfObjectsNtuple_phaseScan.root"
+EOS_OUTPUT="root://eosuser.cern.ch//eos/user/g/gkopp/PF_PhaseScan/pfObjectsNtuple_phaseScan_PFtimingFix.root"
 LOCAL_OUTPUT="/tmp/pfObjectsNtuple_phaseScan.root"
 
 # Build comma-separated list of xrootd input files
