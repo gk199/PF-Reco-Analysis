@@ -1,41 +1,17 @@
 # QCD-like Background: Nominal PF vs. Timing PF — TODO
 
-Goal: quantify how much the seed-level timing cut (Option 2, `seedTiming`)
-disturbs an in-time background sample — cluster multiplicity and cluster
-energy spectrum, nominal vs. one or more timing thresholds, as ratio plots.
+Goal: quantify how much the seed-level timing cut (Option 2, `seedTiming`) disturbs an in-time background sample — cluster multiplicity and cluster energy spectrum, nominal vs. one or more timing thresholds, as ratio plots.
 
-**Sample: reuse the HCAL phase-scan data (`laserType == 0`).** RelVal QCD
-GEN-SIM-DIGI-RAW isn't on disk for this release cycle (RelVal RAW/DIGI tiers
-get purged once a release matures — tape-only, not streamable). Rather than
-sourcing a fresh JetMET dataset via DAS, the phase-scan input files
-(`Condor/input_files.txt`, real JetMET0 collision data from run 392175,
-already sitting on local EOS) are a QIE-phase calibration scan over the *same*
-data — `laserType` (the uMNio phase-delay branch, see
-[Plotting/plot_phaseScan_timing.py:47](Plotting/plot_phaseScan_timing.py#L47))
-lets us select the nominal in-time phase (`laserType == 0`) as the background
-baseline, with no new DAS lookup needed at all.
+**Sample: reuse the HCAL phase-scan data (`laserType == 0`).** RelVal QCD GEN-SIM-DIGI-RAW isn't on disk for this release cycle (RelVal RAW/DIGI tiers are moved to tape quickly). Rather than sourcing a fresh JetMET dataset via DAS, the phase-scan input files (`Condor/input_files.txt`, real JetMET0 collision data from run 392175, already sitting on local EOS) are a QIE-phase calibration scan over the *same* data — `laserType` (the uMNio phase-delay branch, see [Plotting/plot_phaseScan_timing.py:47](Plotting/plot_phaseScan_timing.py#L47)) lets us select the nominal in-time phase (`laserType == 0`) as the background baseline, with no new files needed at all.
 
-**Important caveat resolved:** the *existing* `pf_only_reReco_phaseScan_job*.root`
-/ `pfObjectsNtuple_phaseScan.root` outputs were produced by a Condor batch
-submitted mid-April against the shared (non-isolated) CMSSW area, during the
-same window the pion-gun timing-variant clusterizers were being swapped in and
-out for other tests — so we can't fully trust that archive as "definitely
-nominal PF". Decision: **don't reuse that archive**; produce a fresh nominal
-pass now (today's build already = original clusterizer + timingFix
-position-calc, confirmed by diffing against `PFTestingAlgos/*_original.cc.edit`),
-using the existing `Condor/input_files_first100.txt` subset so nominal and
-timing-PF outputs come from an identical, known-consistent file list.
+**Important caveat resolved:** the *existing* `pf_only_reReco_phaseScan_job*.root`/ `pfObjectsNtuple_phaseScan.root` outputs were produced by a Condor batch submitted mid-April in the shared CMSSW area, during the same window the pion-gun timing-variant clusterizers were being swapped in and out for other tests — so we can't fully trust that as "definitely nominal PF". Decision: **don't reuse that archive**; produce a fresh nominal pass now (today's build is = original clusterizer + timingFix position-calc, confirmed by diffing against `PFTestingAlgos/*_original.cc.edit`), using the existing `Condor/input_files_first100.txt` subset so nominal and timing-PF outputs come from an identical, known file list.
 
-`Plotting/compare_qcd_ratio.py` now supports `--laser-type <int>` to select
-only events with that `laserType` value when filling histograms (0 = nominal
-phase) — added and smoke-tested (confirmed it still passes 100/100 events
-when given `--laser-type -1000` against ntuples where every event defaults to
-that sentinel, i.e. no filtering regression).
+`Plotting/compare_qcd_ratio.py` supports `--laser-type <int>` to select only events with that `laserType` value when filling histograms (0 = nominal phase) — added and smoke-tested (confirmed it still passes 100/100 events when given `--laser-type -1000` against ntuples where every event defaults to that sentinel, i.e. no filtering regression).
 
 ## 1. Fresh nominal-PF pass over the first-100 phase-scan files
-- [ ] Confirm current build is still original+timingFix (it was as of writing — re-check
+- [x] Confirm current build is still original+timingFix (it was as of writing — re-check
       if anything else has been tested in between: `diff RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_original.cc.edit`)
-- [ ] `scram b -j8` if anything needed rebuilding
+- [x] `scram b -j8` if anything needed rebuilding
 ```bash
 cd PF-Reco-Analysis
 mkdir -p /eos/user/g/gkopp/PF_PhaseScan/nominal_fresh
@@ -43,11 +19,11 @@ cd Condor
 ./submit_phaseScan.sh -t input_files_first100.txt /eos/user/g/gkopp/PF_PhaseScan/nominal_fresh   # test 1 job first
 ./submit_phaseScan.sh input_files_first100.txt /eos/user/g/gkopp/PF_PhaseScan/nominal_fresh       # then the full 100
 ```
-- [ ] `condor_q` / `tail -f Condor/logs/condor.log` to monitor
-- [ ] Confirm all 100 jobs completed (`ls /eos/user/g/gkopp/PF_PhaseScan/nominal_fresh | wc -l`)
+- [x] `condor_q` / `tail -f Condor/logs/condor.log` to monitor
+- [x] Confirm all 100 jobs completed (`ls /eos/user/g/gkopp/PF_PhaseScan/nominal_fresh | wc -l`)
 
 ## 2. Timing-PF pass (seed-level, Option 2) — once per threshold
-- [ ] Decide threshold list to scan, e.g. `1 2 3 5` ns (matches values used elsewhere in this repo)
+- [ ] Decide threshold list to scan, e.g. `1 2 3 5` ns (matches values used elsewhere). 3ns is used since that is consistent with the recent dipion tests. 
 
 For each threshold `<ns>`:
 ```bash
