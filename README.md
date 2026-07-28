@@ -391,6 +391,16 @@ python3 Plotting/plot_phaseScan_timing.py \
 ```
 Produces 2D histograms and mean-value profiles (TProfile) of HCAL cluster time, HBHE rechit time, and ECAL cluster time vs `laserType`, plus a combined overlay of all three profiles. An energy threshold (`--emin`, default 1 GeV) is applied to suppress noise hits.
 
+## Nominal PF vs. Timing PF on Background
+
+`NominalPF_Comparison_TODO.md` walks through comparing nominal PF against the
+seed-level timing cut (`seedTiming`, Option 2) on an in-time background
+sample — reusing the phase-scan JetMET0 data above (`laserType == 0` selects
+the nominal in-time phase) instead of sourcing separate QCD MC. Covers
+submitting the Condor re-reco batches, ntupling, and the ratio-plot
+comparison (`Plotting/compare_qcd_ratio.py`, cluster multiplicity and energy
+spectra with a ratio sub-pad).
+
 # Event Display
 The event display is done from the `pfObjectsNtuple.root`.
 ```
@@ -402,6 +412,11 @@ This shows 4 depths of HB, with the cluster outlined in red, the top four plots 
 Run from a conda virtual environment (I run this locally on my laptop to interact with the GUI) with `package-list.txt`. This is way more requirements than actually needed, just found from running `conda list --export` in my area. 
 
 ToDo: currently using MAHI time, would like to plot from TDC time! 
+
+### Ideas for Extending the Event Display
+- **Nominal vs. timing-PF diff overlay**: load both ntuples for the same event and highlight which HCAL rechits/clusters survive the timing cut vs. disappear, rather than only seeing the effect in aggregate ratio histograms (see `Plotting/compare_qcd_ratio.py`). Would show directly what a given threshold removes on a specific event.
+- **Batch/headless PNG export**: currently `plt.show()`-only, requiring the local conda GUI environment. A non-interactive mode that saves PNGs for a given list of event indices (e.g. the highest-energy events) would let this run on lxplus and produce a static gallery for notes/talks.
+- **ECAL and PF candidate/block display**: extend beyond HCAL rechits/clusters to show ECAL EB/EE alongside, and eventually full PF blocks/candidates — ties into the existing Wish List items below and would show the downstream effect of timing cuts on final PF candidates, not just HCAL clusters.
 
 ## Files from SPVCNN 
 The instructions are [here](https://github.com/wpmccormack/spvcnn_instructions/tree/main), however, I am still in the process of adopting this to the newer CMSSW release where current PF studies are done. 

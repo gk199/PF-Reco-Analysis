@@ -23,7 +23,7 @@ cd Condor
 - [x] Confirm all 100 jobs completed (`ls /eos/user/g/gkopp/PF_PhaseScan/nominal_fresh | wc -l`)
 
 ## 2. Timing-PF pass (seed-level, Option 2) — once per threshold
-- [ ] Decide threshold list to scan, e.g. `1 2 3 5` ns (matches values used elsewhere). 3ns is used since that is consistent with the recent dipion tests. 
+- [x] Decide threshold list to scan, e.g. `1 2 3 5` ns (matches values used elsewhere). 3ns is used since that is consistent with the recent dipion tests. 
 
 For each threshold `<ns>`:
 ```bash
@@ -45,29 +45,46 @@ cd Condor
 ./submit_phaseScan.sh -t input_files_first100.txt /eos/user/g/gkopp/PF_PhaseScan/timing_<ns>ns   # test 1 job first
 ./submit_phaseScan.sh input_files_first100.txt /eos/user/g/gkopp/PF_PhaseScan/timing_<ns>ns
 ```
-- [ ] Run for each threshold in the list above (same 100 input files each time — only the clusterizer build changes)
+- [x] Run for each threshold in the list above (same 100 input files each time — only the clusterizer build changes)
 - [ ] After the last threshold, revert to the original clusterizer files (see README "Reverting back to the original ones") so the working tree is clean for other studies
 
 ## 3. Ntuple each batch
-Adapt the `NtuplePhaseScan.sh` pattern (it globs a directory of
-`pf_only_reReco_phaseScan_job*.root` and runs them through the ntupler in one
-`cmsRun` call) to point at each new output directory:
+Runs as a single Condor job via `Condor/run_ntuple_job.sh` — globs
+`pf_only_reReco_phaseScan_job*.root` in the given source directory and writes
+the combined ntuple back into that *same* directory (keeps each batch's
+ntuple alongside its own source RECO files, no separate shared destination
+to collide with). Long-running (~2h+ for a full 93-file batch reading over
+xrootd) so this goes through Condor rather than an interactive/backgrounded
+shell command — the latter isn't guaranteed to survive a session disconnect.
 ```bash
-cmsRun PFObjectsNtupler/python/runPFObjectsNtupler_cfg.py \
-    inputFiles="$(ls /eos/user/g/gkopp/PF_PhaseScan/nominal_fresh/pf_only_reReco_phaseScan_job*.root | sed 's|/eos/|root://eosuser.cern.ch//eos/|' | paste -sd,)" \
-    outputFile=/tmp/pfObjectsNtuple_bkg_nominal.root
-xrdcp -f /tmp/pfObjectsNtuple_bkg_nominal.root root://eosuser.cern.ch//eos/user/g/gkopp/PF_PhaseScan/pfObjectsNtuple_bkg_nominal.root
+cd Condor
+condor_submit -terse - << EOF
+universe              = vanilla
+executable            = $(pwd)/run_ntuple_job.sh
+arguments             = /eos/user/g/gkopp/PF_PhaseScan/nominal_fresh pfObjectsNtuple_bkg_nominal.root
+output                = logs/ntuple_nominal.out
+error                 = logs/ntuple_nominal.err
+log                   = logs/ntuple_nominal_condor.log
++JobFlavour           = "workday"
+request_memory        = 4000
+request_cpus          = 1
+request_disk          = 50000000
+should_transfer_files = YES
+transfer_output_files = ""
+queue 1
+EOF
 
-# repeat per threshold, pointing at timing_<ns>ns/ and naming pfObjectsNtuple_bkg_timing_<ns>ns.root
+# repeat per threshold: arguments = /eos/user/g/gkopp/PF_PhaseScan/timing_<ns>ns pfObjectsNtuple_bkg_timing_<ns>ns.root
 ```
 - [ ] Run for nominal + each threshold
+- [ ] Output lands at `<srcDir>/pfObjectsNtuple_bkg_*.root`, e.g. `nominal_fresh/pfObjectsNtuple_bkg_nominal.root`, `timing_3ns/pfObjectsNtuple_bkg_timing_3ns.root`
 
 ## 4. Plot — select laserType == 0 (nominal in-time phase) from both samples
 ```bash
 python3 Plotting/compare_qcd_ratio.py \
-    --nominal /eos/user/g/gkopp/PF_PhaseScan/pfObjectsNtuple_bkg_nominal.root \
-    --timing  /eos/user/g/gkopp/PF_PhaseScan/pfObjectsNtuple_bkg_timing_1ns.root \
-              /eos/user/g/gkopp/PF_PhaseScan/pfObjectsNtuple_bkg_timing_2ns.root ... \
+    --nominal /eos/user/g/gkopp/PF_PhaseScan/nominal_fresh/pfObjectsNtuple_bkg_nominal.root \
+    --timing  /eos/user/g/gkopp/PF_PhaseScan/timing_1ns/pfObjectsNtuple_bkg_timing_1ns.root \
+              /eos/user/g/gkopp/PF_PhaseScan/timing_2ns/pfObjectsNtuple_bkg_timing_2ns.root ... \
     --labels  1ns 2ns ... \
     --laser-type 0 \
     --output  qcd_timing_ratio.pdf \
