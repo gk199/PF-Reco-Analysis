@@ -72,7 +72,7 @@ cmsDriver.py Configuration/Generator/python/ZJets_pythia8_cfi.py \
     --no_exec
 ```
 - [x] Confirmed the 10-event local test (with PU) runs successfully — reuse that validated fragment/config, just regenerate at `-n 1000` (the per-job event count CRAB will use, `unitsPerJob` below) as the actual pset CRAB submits
-- [ ] `-n` in this pset should equal `config.Data.unitsPerJob` in the CRAB config below — CRAB overrides `maxEvents` at submission using that value, but keep them consistent for clarity when testing locally
+- [x] `-n` in this pset should equal `config.Data.unitsPerJob` in the CRAB config below — CRAB overrides `maxEvents` at submission using that value, but keep them consistent for clarity when testing locally
 - [x] `--nThreads` here must equal `config.JobType.numCores` in the CRAB config below
 
 **`crabConfig.py`** (new file, `ZJetsPU/crabConfig.py` in the `MC_Generation` area).
@@ -91,11 +91,15 @@ config.JobType.psetName = 'ZJetsPU_cfg.py'
 # same filename in every job's pset is fine — CRAB appends the job number
 # at stage-out (ZJetsPU_GEN-SIM-RAW.root -> ZJetsPU_GEN-SIM-RAW_1.root, _2.root, ...)
 config.JobType.outputFiles = ['ZJetsPU_GEN-SIM-RAW.root']
-# Jump to 4 cores/8000MB for real margin above the observed 4500MB max kill, rather than another small increment.
+# Jump to 4 cores/8000MB 
 config.JobType.numCores = 4
 config.JobType.maxMemoryMB = 8000
-# Actual job runtime observed: 5-35 min. Default maxJobRuntimeMin (1250 min) was flagged by CRAB. Set a realistic ceiling.
-config.JobType.maxJobRuntimeMin = 240
+# runtimes turned out to be 2:26:17 average, up to 4:00:36 —
+# right at the 240min/4hr cap, which then wall-clock-killed 24/50 jobs
+# (exit 50664). Fixed via `crab resubmit --maxjobruntime=480` for the
+# already-failed jobs; bumping the base config here too for future fresh
+# submissions.
+config.JobType.maxJobRuntimeMin = 480
 
 config.Data.outputPrimaryDataset = 'ZJetsPU'
 config.Data.splitting = 'EventBased'
@@ -107,47 +111,77 @@ config.Data.outputDatasetTag = 'ZJetsPU_nominal_v1'
 config.Site.storageSite = 'T2_US_Wisconsin'
 ```
 - [x] `source /cvmfs/cms.cern.ch/crab3/crab.sh` (or however CRAB is set up in this environment) before `crab submit -c crabConfig.py`
-- [ ] `crab status -d crab_ZJetsPU/crab_ZJetsPU_gensim_v1` to monitor
-- [ ] Once complete, `crab report` / the task's output path gives the exact
-      list of output `.root` files under `/store/user/...` for step 4
+- [x] `crab status -d crab_ZJetsPU/crab_ZJetsPU_gensim_v1` to monitor
+- [ ] Once complete, `crab report` / the task's output path gives the exact list of output `.root` files under `/store/user/...` for step 4
 
 ## 4. Re-reco: nominal PF and 3ns seed-timing PF
 
-Same pattern as the QCD/phase-scan study (`NominalPF_Comparison_TODO.md`),
-just pointed at the new GEN-SIM-RAW files instead:
+Generation already ran `GEN,SIM,DIGI,L1,DIGI2RAW`, so the output is RAW-tier content — same situation as the real JetMET data re-reco'd elsewhere in this repo. Same `RAW2DIGI,L1Reco,RECO` step list as
+`MyPFStudy_ReReco_MC_condor.py` (proven throughout this whole study), but **not** that config directly — this needs standard full AOD content (jets, MET, tracks, vertices) for PAT downstream, not that config's HCAL-cluster-only `outputCommands`. `--eventcontent AODSIM` gives the standard full set.
+
+**`HLT:Fake2` needed** — generation never ran an actual HLT simulation step (`GEN,SIM,DIGI,L1,DIGI2RAW` skips it, matching the DiPionGun convention), so `TriggerResults::HLT` genuinely doesn't exist in these files. The standard NanoAOD sequence (step 5) unconditionally expects it (HLT trigger-bit tables, MET-filter flags) and crashes without it: `Principal::getByLabel: Found zero products... Looking for process: HLT`. `HLT:Fake2` is the fix for this — a pass-through HLT menu for private MC that doesn't need a real trigger decision, just a valid `TriggerResults` collection to exist. HLT reads RAW-level data (same as real HLT during data-taking), so this runs as an extra step on the *existing* GEN-SIM-RAW files — no need to redo the CRAB generation.
+
 ```bash
 cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/PF-Reco-Analysis
-./SetTimingThreshold.sh 3   # for the timing-PF pass only
 
-# nominal: build with PFTestingAlgos/*_original.cc.edit (confirm current
-# build state first, same diff check as before)
-# timing:  build with PFMultiDepthClusterizer_seedTiming.cc.edit + friends
+cmsDriver.py \
+    --mc \
+    --step HLT:Fake2,RAW2DIGI,L1Reco,RECO \
+    --era Run3_2025 \
+    --geometry DB:Extended \
+    --conditions auto:phase1_2025_realistic \
+    --eventcontent AODSIM \
+    --datatier AODSIM \
+    --filein "file:ZJetsPU_GEN-SIM-RAW.root" \
+    --fileout "file:ZJetsPU_<variant>_AOD.root" \
+    --python_filename "ZJetsPU_<variant>_RECO_cfg.py" \
+    -n -1 \
+    --no_exec
+
+cmsRun ZJetsPU_<variant>_RECO_cfg.py
 ```
-- [ ] Decide RECO `--step`/`--datatier` — needs jets and MET downstream, so
-      keep AOD-level content (or at least whatever NanoAOD's PAT sequences
-      need — `particleFlow`, tracks, vertices — not just the narrow HCAL
-      cluster `outputCommands` used for the phase-scan ntupler). This is a
-      new config, not a copy of `MyPFStudy_ReReco_MC_condor.py` (that one
-      deliberately drops everything except PF clusters for the timing-fix
-      validation).
-- [ ] Confirm `142X`/`auto:phase1_2025_realistic` GlobalTag is appropriate
-      for RECO on this sample (should be, matches generation)
+`<variant>` = `nominal` or `timing3ns`; `<N>` = the per-job index from the CRAB output filenames (`ZJetsPU_GEN-SIM-RAW_1.root`, `_2.root`, ...). Same config for both variants — only the compiled clusterizer plugin differs between the two build states below, not the cmsDriver command itself.
+
+- [x] **Verified on the 10-event local sample (nominal PF build)**: `HLT:Fake2,RAW2DIGI,L1Reco,RECO` runs cleanly, and the resulting AODSIM fed through step 5's PAT,NANO no longer hits the `TriggerResults::HLT` crash. `Jet_pt`/`GenJet_pt`/ `Jet_genJetIdx` all present. Note: use `PFMET_pt`/`PFMET_phi` for the resolution study; `PFMET_*` and `PuppiMET_*` are both fully populated under their real names). Leaning `PFMET_pt` over `PuppiMET_pt` for the actual comparison — PUPPI's own per-particle PU reweighting on top of PF candidates could partially mask the effect we're isolating from the seed-timing PF clustering change itself.
+- [ ] Still need: same local test on the timing-PF (3ns seed timing) build to confirm the pipeline works identically there — same input file, just rebuild the clusterizer and rerun the same three cmsRun commands
+- [ ] Build state for the nominal pass — confirm current build matches `PFTestingAlgos/*_original.cc.edit` (same diff check as the QCD study) before running any `<N>`
+- [ ] Then for the timing pass: `./SetTimingThreshold.sh 3`, copy in `PFMultiDepthClusterizer_seedTiming.cc.edit` + similar, `scram b -j8`, before running the same cmsDriver command again
+- [ ] Get the list of CRAB output files/indices once the generation task finishes (`crab report` or listing the `/store/user/...` output path directly) — `<N>` above is a placeholder until then
+- [ ] Confirm `142X`/`auto:phase1_2025_realistic` GlobalTag is appropriate for RECO on this sample (should be, matches generation)
+- [x] Batch submission tool: **Condor**. Re-reco is deterministic (no per-job seed handling needed, unlike generation), and reusing `run_phaseScan_job.sh` as a template avoids paying the CRAB memory/runtime tuning cost a second time for a different (likely also memory-hungry) workload. 
+- [ ] Write `Condor/run_zjetsReco_job.sh` (new, modeled on `run_phaseScan_job.sh`): stage input GEN-SIM-RAW locally via `xrdcp`, `cmsRun` the RAW2DIGI,L1Reco,RECO cfg, `xrdcp -f` the AODSIM output to EOS. 50 files x 2 PF variants = 100 jobs total (submit nominal and timing as two separate batches, matching the two build states)
+- [ ] Same lessons as the phase-scan study apply here too: cap nothing on `maxEvents` since `-n -1` processes each job's full 1000 events (no equivalent of the `_numEvent<N>` rename surprise expected since we're not truncating early this time, but worth re-checking output filenames after the first test job regardless), `xrdcp -f` always, watch EOS quota
 
 ## 5. NanoAOD
 
-New step for this repo — standard `cmsDriver.py --step PAT,NANO` on top of
-the RECO/AOD output from step 4:
+Separate job from step 4, reading the AODSIM output — kept separate rather
+than one combined `RAW2DIGI,L1Reco,RECO,PAT,NANO` step, since RECO on
+high-PU events already needed real memory tuning during generation (8000MB)
+and stacking PAT+NANO on top risks repeating that blind-guessing cycle in a
+bigger, more expensive job. If PAT/NANO config needs iteration, this way it
+doesn't require redoing the expensive RECO step each time. Delete the AODSIM
+intermediate after NanoAOD succeeds (same "convert then delete" pattern as
+`nominal_fresh/` in the phase-scan study).
+
 ```bash
-cmsDriver.py --mc \
+cmsDriver.py \
+    --mc \
     --step PAT,NANO \
     --era Run3_2025 \
     --conditions auto:phase1_2025_realistic \
-    --filein file:<nominal_or_timing_RECO_output>.root \
-    --fileout file:<...>_NANO.root \
     --eventcontent NANOAODSIM \
     --datatier NANOAODSIM \
-    -n -1 --no_exec
+    --filein "file:ZJetsPU_<variant>_AOD.root" \
+    --fileout "file:ZJetsPU_<variant>_NANO.root" \
+    --python_filename "ZJetsPU_<variant>_NANO_cfg.py" \
+    -n -1 \
+    --no_exec
+
+cmsRun ZJetsPU_<variant>_NANO_cfg.py
 ```
+No `--geometry` here — PAT/NANO slim already-reconstructed AOD content,
+no geometry-dependent reconstruction runs at this stage.
+
 - [ ] Verify PAT's jet/MET sequences run cleanly on the timing-PF variant —
       should work since PAT only depends on standard collection names
       (`particleFlow`, `ak4PFJets`, etc.), not on which clusterizer produced
@@ -164,9 +198,10 @@ cmsDriver.py --mc \
 - [ ] Jet resolution: `(Jet_pt[genJetIdx] - GenJet_pt) / GenJet_pt`, binned
       in `GenJet_pt` (and optionally η), nominal vs. timing PF overlaid —
       same ratio/overlay pattern as `compare_qcd_ratio.py`
-- [ ] MET resolution: `(MET_pt - GenMET_pt)` or the standard
-      parallel/perpendicular resolution decomposition relative to the
-      hadronic recoil, nominal vs. timing PF overlaid
+- [ ] MET resolution: `(PFMET_pt - GenMET_pt)` (`PFMET_*`, not `MET_pt` —
+      see step 4 note) or the standard parallel/perpendicular resolution
+      decomposition relative to the hadronic recoil, nominal vs. timing PF
+      overlaid
 - [ ] Reuse the `dataviz` skill for the actual plot styling/colors when
       building this
 
