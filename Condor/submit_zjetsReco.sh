@@ -53,13 +53,17 @@ fi
 mkdir -p "${OUTPUT_DIR}"
 mkdir -p "${LOG_DIR}"
 
-SUBMIT_LIST="${INPUT_LIST}"
+# Always strip comments/blank lines — a bug here previously submitted raw
+# comment lines as literal (bogus) inputFile values, which also shifted
+# every real job's $(ProcId) away from its input file's own job index.
+SUBMIT_LIST=$(mktemp)
+grep -v '^\s*#' "${INPUT_LIST}" | grep -v '^\s*$' > "${SUBMIT_LIST}"
 if [ ${TEST_MODE} -eq 1 ]; then
-    SUBMIT_LIST=$(mktemp)
-    grep -v '^\s*#' "${INPUT_LIST}" | grep -v '^\s*$' | head -1 > "${SUBMIT_LIST}"
+    head -1 "${SUBMIT_LIST}" > "${SUBMIT_LIST}.tmp"
+    mv "${SUBMIT_LIST}.tmp" "${SUBMIT_LIST}"
 fi
 
-N_JOBS=$(grep -v '^\s*#' "${SUBMIT_LIST}" | grep -v '^\s*$' | wc -l)
+N_JOBS=$(wc -l < "${SUBMIT_LIST}")
 
 echo "Input file list : ${INPUT_LIST}"
 echo "Output directory: ${OUTPUT_DIR}"
@@ -69,16 +73,42 @@ echo "Jobs to submit  : ${N_JOBS}"
 echo ""
 
 # -----------------------------------------------------------------------
-# Submit all jobs as a single cluster: one proc ID per input file.
-# $(ProcId) and $(inputFile) are filled by condor for each queued item.
+# Proxy: the input GEN-SIM-RAW files live at T2_US_Wisconsin, a genuine
+# remote WLCG site (unlike the phase-scan study's CERN-internal EOS reads)
+# — xrdcp there needs a real grid proxy. use_x509userproxy=True failed
+# here in practice ("Transfer input files failure ... reading from file
+# /tmp/x509up_u<uid>: No such file or directory") — /tmp proxies aren't
+# reliably present by the time the schedd actually transfers them (can be
+# a while after submission if the job sits idle). Fix, matching
+# gk199/Run3-HCAL-LLP-Analysis: copy the current proxy to a persistent,
+# non-/tmp location and explicitly ship it via transfer_input_files.
 # -----------------------------------------------------------------------
+echo "Checking for a valid grid proxy..."
+CURRENT_PROXY=$(voms-proxy-info --path 2>/dev/null)
+if [ -z "${CURRENT_PROXY}" ] || ! voms-proxy-info --exists 2>/dev/null; then
+    echo "ERROR: no valid grid proxy found. Run:"
+    echo "  voms-proxy-init --rfc --voms cms --valid 172:00"
+    echo "before submitting."
+    exit 1
+fi
+
+PERSISTENT_PROXY_DIR="${HOME}/private"
+mkdir -p "${PERSISTENT_PROXY_DIR}"
+chmod 700 "${PERSISTENT_PROXY_DIR}"
+PROXY_BASENAME="$(basename "${CURRENT_PROXY}")"
+PERSISTENT_PROXY="${PERSISTENT_PROXY_DIR}/${PROXY_BASENAME}"
+cp -f "${CURRENT_PROXY}" "${PERSISTENT_PROXY}"
+chmod 600 "${PERSISTENT_PROXY}"
+echo "Proxy copied to persistent location: ${PERSISTENT_PROXY}"
+
 condor_submit -terse - << EOF
 universe              = vanilla
 executable            = ${WRAPPER}
-arguments             = \$(inputFile) \$(ProcId) ${OUTPUT_DIR}
+arguments             = \$(inputFile) \$(ProcId) ${OUTPUT_DIR} ${PROXY_BASENAME}
 output                = ${LOG_DIR}/zjetsReco_job_\$(ProcId).out
 error                 = ${LOG_DIR}/zjetsReco_job_\$(ProcId).err
 log                   = ${LOG_DIR}/zjetsReco_condor.log
+transfer_input_files  = ${PERSISTENT_PROXY}
 +JobFlavour           = "tomorrow"
 request_memory        = 4000
 request_cpus          = 1
@@ -88,8 +118,7 @@ transfer_output_files = ""
 queue inputFile from ${SUBMIT_LIST}
 EOF
 
-# Clean up temp file used in test mode
-[ ${TEST_MODE} -eq 1 ] && rm -f "${SUBMIT_LIST}"
+rm -f "${SUBMIT_LIST}"
 
 echo ""
 echo "Submitted ${N_JOBS} jobs."

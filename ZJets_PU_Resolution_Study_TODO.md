@@ -138,11 +138,10 @@ cmsRun ZJetsPU_<variant>_RECO_cfg.py
 `<variant>` = `nominal` or `timing3ns`; `<N>` = the per-job index from the CRAB output filenames (`ZJetsPU_GEN-SIM-RAW_1.root`, `_2.root`, ...). Same config for both variants — only the compiled clusterizer plugin differs between the two build states below, not the cmsDriver command itself.
 
 - [x] **Verified on the 10-event local sample (nominal PF build)**: `HLT:Fake2,RAW2DIGI,L1Reco,RECO` runs, and the resulting AODSIM fed through step 5's PAT,NANO. `Jet_pt`/`GenJet_pt`/ `Jet_genJetIdx` all present. Note: use `PFMET_pt`/`PFMET_phi` for the resolution study; `PFMET_*` and `PuppiMET_*` are both fully populated under their real names). Leaning `PFMET_pt` over `PuppiMET_pt` for the actual comparison — PUPPI's own per-particle PU reweighting on top of PF candidates could partially mask the effect we're isolating from the seed-timing PF clustering change itself. (? to check)
-- [ ] Still need: same local test on the timing-PF (3ns seed timing) build to confirm the pipeline works identically there — same input file, just rebuild the clusterizer and rerun the same three cmsRun commands
-- [ ] Build state for the nominal pass — confirm current build matches `PFTestingAlgos/*_original.cc.edit` (same diff check as the QCD study) before running any `<N>`
-- [ ] Then for the timing pass: `./SetTimingThreshold.sh 3`, copy in `PFMultiDepthClusterizer_seedTiming.cc.edit` + similar, `scram b -j8`, before running the same cmsDriver command again
-- [ ] Get the list of CRAB output files/indices once the generation task finishes (`crab report` or listing the `/store/user/...` output path directly) — `<N>` above is a placeholder until then
-- [x] Batch submission tool: **Condor**. Re-reco is deterministic (no per-job seed handling needed, unlike generation), and reusing `run_phaseScan_job.sh` as a template avoids paying the CRAB memory/runtime tuning cost a second time for a different (likely also memory-hungry) workload. 
+- [x] Build state for the nominal pass — confirm current build matches `PFTestingAlgos/*_original.cc.edit` (same check as the QCD study) before running any `<N>`
+- [x] Then for the timing pass: `./SetTimingThreshold.sh 3`, `scram b -j8`, before running the same cmsDriver command again
+- [x] Get the list of CRAB output files/indices once the generation task finishes (`crab report` or listing the `/store/user/...` output path directly) 
+- [x] Batch submission tool: **Condor**. Re-reco is deterministic (no per-job seed handling needed, unlike generation), and reusing `run_phaseScan_job.sh` as a template. 
 - [x] `Condor/run_zjetsReco_job.sh` + `Condor/submit_zjetsReco.sh` written
       (modeled on `run_phaseScan_job.sh`/`submit_phaseScan.sh`) and the
       underlying cfg (`MyPFStudy_ZJetsPU_RECO_condor.py`, VarParsing-enabled
@@ -151,33 +150,21 @@ cmsRun ZJetsPU_<variant>_RECO_cfg.py
       list format: `Condor/input_files_zjetsReco_example.txt`.
 ```bash
 cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/PF-Reco-Analysis/Condor
-./submit_zjetsReco.sh -t input_files_nominal.txt /eos/user/g/gkopp/PF_ZJetsPU/reco_nominal   # test 1 job first
-./submit_zjetsReco.sh input_files_nominal.txt /eos/user/g/gkopp/PF_ZJetsPU/reco_nominal      # then all 50
+./submit_zjetsReco.sh -t input_files_zjets.txt /eos/user/g/gkopp/PF_ZJetsPU/reco_nominal   # test 1 job first
+./submit_zjetsReco.sh input_files_zjets.txt /eos/user/g/gkopp/PF_ZJetsPU/reco_nominal      # then all 50
 
 # rebuild with the timing-PF clusterizer (SetTimingThreshold.sh 3, etc.), then:
-./submit_zjetsReco.sh -t input_files_nominal.txt /eos/user/g/gkopp/PF_ZJetsPU/reco_timing3ns
-./submit_zjetsReco.sh input_files_nominal.txt /eos/user/g/gkopp/PF_ZJetsPU/reco_timing3ns
+./submit_zjetsReco.sh -t input_files_zjets.txt /eos/user/g/gkopp/PF_ZJetsPU/reco_timing3ns
+./submit_zjetsReco.sh input_files_zjets.txt /eos/user/g/gkopp/PF_ZJetsPU/reco_timing3ns
 ```
-- [ ] **Unverified — memory/runtime in `submit_zjetsReco.sh` are guesses**
-      (`request_memory = 4000`, `+JobFlavour = "tomorrow"`/24h). RECO
-      (tracking/vertexing/PF) on high-PU events may need real tuning like
-      generation did (which needed 8000MB/4 cores/480min before it stopped
-      failing). Check the `-t` test job's actual memory/runtime before
-      trusting these defaults for the full 100-job batch.
-- [ ] Same input list (`input_files_nominal.txt` above) is reused for both
-      the nominal and timing submissions — it's the same 50 GEN-SIM-RAW
-      files either way, only the compiled clusterizer differs
+
+- [x] Same input list (`input_files_zjets.txt` above) is reused for both the nominal and timing submissions — it's the same 50 GEN-SIM-RAW files either way, only the compiled clusterizer differs
 <!-- - [ ] Confirm `142X`/`auto:phase1_2025_realistic` GlobalTag is appropriate for RECO on this sample (should be, matches generation)
 - [ ] Same lessons as the phase-scan study apply here too: cap nothing on `maxEvents` since `-n -1` processes each job's full 1000 events (no equivalent of the `_numEvent<N>` rename surprise expected since we're not truncating early this time, but worth re-checking output filenames after the first test job regardless), `xrdcp -f` always, watch EOS quota -->
 
 ## 5. NanoAOD
 
-Separate job from step 4, reading the AODSIM output — kept separate rather
-than one combined `RAW2DIGI,L1Reco,RECO,PAT,NANO` step, since RECO on
-high-PU events already needed real memory tuning during generation (8000MB)
-and stacking PAT+NANO on top risks repeating that blind-guessing cycle in a
-bigger, more expensive job. If PAT/NANO config needs iteration, this way it
-doesn't require redoing the expensive RECO step each time. 
+From the AODSIM output, run PAT/NANO config.  
 
 ```bash
 cmsDriver.py \
@@ -195,15 +182,20 @@ cmsDriver.py \
 
 cmsRun ZJetsPU_<variant>_NANO_cfg.py
 ```
-No `--geometry` here — PAT/NANO slim already-reconstructed AOD content,
-no geometry-dependent reconstruction runs at this stage.
+No `--geometry` here — PAT/NANO slim already-reconstructed AOD content, no geometry-dependent reconstruction runs at this stage.
 
-- [ ] Verify PAT's jet/MET sequences run cleanly on the timing-PF variant —
-      should work since PAT only depends on standard collection names
-      (`particleFlow`, `ak4PFJets`, etc.), not on which clusterizer produced
-      the upstream PF candidates
-- [ ] Confirm `GenJet`/`GenMET` branches are present by default (they are,
-      standard NanoAOD content for MC) — needed for resolution truth-matching
+- [x] Verified on the 10-event local sample (nominal PF build): PAT's jet/MET sequences run on privately-generated AOD. `GenJet_pt`/`GenMET_pt`/`GenMET_phi` all present as expected.
+
+**`Condor/run_zjetsNano_job.sh` + `Condor/submit_zjetsNano.sh`** with the cfg `MyPFStudy_ZJetsPU_NANO_condor.py`.
+```bash
+cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/PF-Reco-Analysis/Condor
+./submit_zjetsNano.sh -t input_files_reco_nominal.txt /eos/user/g/gkopp/PF_ZJetsPU/nano_nominal   # test 1 first
+./submit_zjetsNano.sh input_files_reco_nominal.txt /eos/user/g/gkopp/PF_ZJetsPU/nano_nominal      # then all 50
+# repeat with input_files_reco_timing3ns.txt -> nano_timing3ns once step 4's timing batch is done
+```
+`input_files_reco_<variant>.txt` here lists step 4's AODSIM output files directly (e.g. `ls /eos/user/g/gkopp/PF_ZJetsPU/reco_nominal/*.root`).
+- [ ] **Unverified — memory/runtime in `submit_zjetsNano.sh` are guesses** (`request_memory = 3000`, `+JobFlavour = "workday"`/8h) — PAT/NANO slimming is generally much lighter than RECO, but check the `-t` test job's actual usage before trusting these for the full batch anyway
+- [ ] Confirm `GenJet`/`GenMET` branches are present by default — needed for resolution truth-matching
 
 ## 6. Resolution plotting (new script)
 
