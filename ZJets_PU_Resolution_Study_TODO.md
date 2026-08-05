@@ -186,7 +186,7 @@ No `--geometry` here — PAT/NANO slim already-reconstructed AOD content, no geo
 
 - [x] Verified on the 10-event local sample (nominal PF build): PAT's jet/MET sequences run on privately-generated AOD. `GenJet_pt`/`GenMET_pt`/`GenMET_phi` all present as expected.
 
-**`Condor/run_zjetsNano_job.sh` + `Condor/submit_zjetsNano.sh`** with the cfg `MyPFStudy_ZJetsPU_NANO_condor.py`.
+**`Condor/run_zjetsNano_job.sh` + `Condor/submit_zjetsNano.sh`** with the cfg `MyPFStudy_ZJetsPU_NANO_condor.py`. These jobs are very fast, using `longlunch` which is even longer than needed.
 ```bash
 cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/PF-Reco-Analysis/Condor
 ./submit_zjetsNano.sh -t input_files_reco_nominal.txt /eos/user/g/gkopp/PF_ZJetsPU/nano_nominal   # test 1 first
@@ -194,23 +194,56 @@ cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/PF-Reco-Analysis
 # repeat with input_files_reco_timing3ns.txt -> nano_timing3ns once step 4's timing batch is done
 ```
 `input_files_reco_<variant>.txt` here lists step 4's AODSIM output files directly (e.g. `ls /eos/user/g/gkopp/PF_ZJetsPU/reco_nominal/*.root`).
-- [ ] **Unverified — memory/runtime in `submit_zjetsNano.sh` are guesses** (`request_memory = 3000`, `+JobFlavour = "workday"`/8h) — PAT/NANO slimming is generally much lighter than RECO, but check the `-t` test job's actual usage before trusting these for the full batch anyway
-- [ ] Confirm `GenJet`/`GenMET` branches are present by default — needed for resolution truth-matching
+- [x] Confirm `GenJet`/`GenMET` branches are present by default — needed for resolution truth-matching
 
-## 6. Resolution plotting (new script)
+## 6. Resolution plotting
 
-`Plotting/compare_zjets_resolution.py` (doesn't exist yet):
-- [ ] Match `Jet` to `GenJet` (NanoAOD's `Jet_genJetIdx` branch does this
-      directly — no manual dR matching needed)
-- [ ] Jet resolution: `(Jet_pt[genJetIdx] - GenJet_pt) / GenJet_pt`, binned
-      in `GenJet_pt` (and optionally η), nominal vs. timing PF overlaid —
-      same ratio/overlay pattern as `compare_qcd_ratio.py`
-- [ ] MET resolution: `(PFMET_pt - GenMET_pt)` (`PFMET_*`, not `MET_pt` —
-      see step 4 note) or the standard parallel/perpendicular resolution
-      decomposition relative to the hadronic recoil, nominal vs. timing PF
-      overlaid
-- [ ] Reuse the `dataviz` skill for the actual plot styling/colors when
-      building this
+**`JetMET_Resolution/plot_jetmet_resolution.py`** — new dedicated subdirectory). Reads NanoAOD with `uproot`/`awkward` (handles the jagged per-jet arrays more naturally than a PyROOT TTree loop — same tool `EventDisplay/PF_HCAL_rechit_cluster.py` already uses), fills/draws with PyROOT to match the `Plotting/*.py` convention. Verified against `ZJetsPU_NANO_job0.root`, 1000 events, 1573 gen-matched jets.
+```bash
+cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/PF-Reco-Analysis/JetMET_Resolution
+python3 plot_jetmet_resolution.py \
+    --input "/eos/user/g/gkopp/PF_ZJetsPU/nano_timing3ns/*.root" \
+    --output resolution_timing3ns.root \
+    --pdf resolution_timing3ns.pdf
+python3 plot_jetmet_resolution.py \
+    --input "/eos/user/g/gkopp/PF_ZJetsPU/nano_nominal/*.root" \
+    --output resolution_nominal.root \
+    --pdf resolution_nominal.pdf
+```
+- [x] Match `Jet` to `GenJet` via `Jet_genJetIdx` (NanoAOD's own gen-matching, `>=0` = matched) — done
+- [x] Jet resolution: `(Jet_pt - GenJet_pt) / GenJet_pt` for gen-matched jets above a 20 GeV `GenJet_pt` floor (avoids soft/noise-dominated jets) — done, one inclusive histogram (not yet binned in `GenJet_pt`/η)
+- [x] MET resolution: both `PFMET_pt - GenMET_pt` and `PuppiMET_pt - GenMET_pt` (absolute difference, not relative — GenMET near zero would blow up a relative metric) — done. Both show a large positive bias vs GenMET (PF: mean 42.9 GeV; Puppi: mean 32.6 GeV) — confirmed this isn't missing JEC/Type-1 MET corrections (`Jet_rawFactor` nonzero for 100% of jets, ~26% avg correction; `CorrT1METJet` populated; GT resolves to the real, official `150X_mcRun3_2025_realistic_v2`, same one used throughout this study) — most likely genuine MET degradation from the aggressive 55-75 in-time PU choice combined with this private sample not exactly matching the JEC payload's validation conditions. Since nominal and timing-PF share the same generator/PU library/GT, this bias should mostly cancel in the differential comparison — not treated as a blocker, but absolute MET numbers from this study aren't officially-calibrated performance figures.
+- [x] Nominal vs. timing-PF overlay — done, see step 7 below
+- [ ] Binning jet resolution by `GenJet_pt` (and optionally η) instead of one inclusive histogram (a timing effect concentrated in one pT/η region would be washed out in the inclusive histogram)
+<!-- - [ ] Parallel/perpendicular MET resolution decomposition relative to the
+      hadronic recoil — deferred, absolute-difference histograms were
+      enough to get a first look and surface the JEC question above
+- [ ] Reuse the `dataviz` skill for plot styling/colors if this gets
+      revisited beyond the current simple PyROOT canvases -->
+
+## 7. Nominal vs. timing overlay
+
+**`JetMET_Resolution/compare_jetmet_resolution.py`** — overlays the variants produced in step 6. It reads the histogram ROOT files that `plot_jetmet_resolution.py` already writes (not the NanoAOD again), so it is fast and the two scripts stay decoupled: re-run step 6 only when the ntuples change, re-run this whenever the plot styling does. One page per observable (jet pT resolution, PF MET, Puppi MET), overlay on top and a timing/nominal ratio panel below — same layout as `Plotting/compare_qcd_ratio.py`.
+
+```bash
+cd /afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/PF-Reco-Analysis/JetMET_Resolution
+python3 compare_jetmet_resolution.py \
+    --nominal resolution_nominal.root \
+    --timing  resolution_timing3ns.root \
+    --labels  3ns \
+    --output  resolution_nominal_vs_timing.pdf \
+    --rootfile resolution_nominal_vs_timing.root
+```
+
+Several timing thresholds can be overlaid against the one nominal baseline at once:
+```bash
+python3 compare_jetmet_resolution.py \
+    --nominal resolution_nominal.root \
+    --timing  resolution_timing1ns.root resolution_timing3ns.root resolution_timing5ns.root \
+    --labels  1ns 3ns 5ns
+```
+
+Other options: `--normalize` (scale each variant to unit area — needed if the variants were run over different numbers of events, otherwise the ratio panel measures statistics rather than the PF change), `--logy`, `--ratio-min`/`--ratio-max` for the ratio panel range, and `--ratio-min-entries` (default 10) which blanks ratio points whose nominal bin is too sparse to say anything, so tail noise doesn't swamp the bulk.
 
 ## Open decisions before starting
 - [x] `--pileup` scenario (`Run3_Flat55To75_PoissonOOTPU`) and beamspot
