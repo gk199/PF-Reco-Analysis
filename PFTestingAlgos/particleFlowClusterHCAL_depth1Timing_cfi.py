@@ -29,7 +29,7 @@ particleFlowClusterHCAL = cms.EDProducer('PFMultiDepthClusterProducer',
            nSigmaPhi = cms.double(2.),
            # timing parameters: gate depth-cluster merging on seed time vs depth-1 reference
            useTiming = cms.untracked.bool(True),
-           timeThreshold = cms.untracked.double(5),  # ns # PFTesting - change this
+           timeThreshold = cms.untracked.double(3),  # ns # PFTesting - change this
            #pf clustering parameters
            minFractionToKeep = cms.double(1e-7),
            allCellsPositionCalc = cms.PSet(

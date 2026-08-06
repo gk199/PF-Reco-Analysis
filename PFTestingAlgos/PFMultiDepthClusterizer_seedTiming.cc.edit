@@ -118,7 +118,7 @@ DEFINE_EDM_PLUGIN(PFClusterBuilderFactory, PFMultiDepthClusterizer, "PFMultiDept
 PFMultiDepthClusterizer::PFMultiDepthClusterizer(const edm::ParameterSet& conf, edm::ConsumesCollector& cc)
     : PFClusterBuilderBase(conf, cc),
       _useTiming(conf.getUntrackedParameter<bool>("useTiming", true)),
-      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 5)) {
+      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 3)) {
   const auto& acConf = conf.getParameterSet("allCellsPositionCalc");
   if (!acConf.empty()) {
     const std::string& algoac = acConf.getParameter<std::string>("algoName");
@@ -164,12 +164,14 @@ void PFMultiDepthClusterizer::buildClusters(const reco::PFClusterCollection& inp
 
     // Find the highest-energy seed among all clusters to be merged.
     // Use its time as the fixed global reference for all seed timing checks.
+    // HB only: a merge group can straddle the HB/HE overlap, and an HE reference
+    // time would be meaningless.  No HB seed leaves -999, disabling the cut.
     double refSeedTime = -999.0;
     double maxSeedEnergy = -1.0;
     for (unsigned int idx : toMerge) {
       for (const auto& frac : input[idx].recHitFractions()) {
         if (frac.recHitRef()->detId() == input[idx].seed()) {
-          if (frac.recHitRef()->energy() > maxSeedEnergy) {
+          if (frac.recHitRef()->layer() == PFLayer::HCAL_BARREL1 && frac.recHitRef()->energy() > maxSeedEnergy) {
             maxSeedEnergy = frac.recHitRef()->energy();
             refSeedTime = frac.recHitRef()->time();
           }
@@ -214,10 +216,12 @@ void PFMultiDepthClusterizer::buildClusters(const reco::PFClusterCollection& inp
         mask[i] = true;
         continue;
       }
+      // HB-only: an HE anchor leaves refSeedTimeOOT at -999, disabling the cut.
       double refSeedTimeOOT = -999.0;
       for (const auto& frac : input[i].recHitFractions())
         if (frac.recHitRef()->detId() == input[i].seed()) {
-          refSeedTimeOOT = frac.recHitRef()->time();
+          if (frac.recHitRef()->layer() == PFLayer::HCAL_BARREL1)
+            refSeedTimeOOT = frac.recHitRef()->time();
           break;
         }
       reco::PFCluster cluster = input[i];
@@ -356,14 +360,18 @@ bool PFMultiDepthClusterizer::absorbCluster(reco::PFCluster& main,
   // Seed timing cut against the fixed global highest-energy seed time.
   // If the added cluster's seed falls outside the time window, reject the
   // entire depth cluster — no cells are added.
+  // HB only: a depth cluster seeded outside HCAL_BARREL1 is never time-rejected,
+  // so a pure-HE stack reduces exactly to the nominal algorithm.
   if (_useTiming && refSeedTime > -998.0) {
     double addedSeedTime = -999.0;
+    bool addedSeedInHB = false;
     for (const auto& frac : added.recHitFractions())
       if (frac.recHitRef()->detId() == added.seed()) {
         addedSeedTime = frac.recHitRef()->time();
+        addedSeedInHB = (frac.recHitRef()->layer() == PFLayer::HCAL_BARREL1);
         break;
       }
-    if (addedSeedTime > -998.0 && std::abs(addedSeedTime - refSeedTime) >= _timeThreshold)
+    if (addedSeedInHB && addedSeedTime > -998.0 && std::abs(addedSeedTime - refSeedTime) >= _timeThreshold)
       return false;  // reject entire depth cluster
   }
 

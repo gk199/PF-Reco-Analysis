@@ -138,7 +138,7 @@ DEFINE_EDM_PLUGIN(PFClusterBuilderFactory, PFMultiDepthClusterizer, "PFMultiDept
 PFMultiDepthClusterizer::PFMultiDepthClusterizer(const edm::ParameterSet& conf, edm::ConsumesCollector& cc)
     : PFClusterBuilderBase(conf, cc),
       _useTiming(conf.getUntrackedParameter<bool>("useTiming", true)),
-      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 5)) {
+      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 3)) {
   const auto& acConf = conf.getParameterSet("allCellsPositionCalc");
   if (!acConf.empty()) {
     const std::string& algoac = acConf.getParameter<std::string>("algoName");
@@ -188,12 +188,14 @@ void PFMultiDepthClusterizer::buildClusters(const reco::PFClusterCollection& inp
 
     // Find the highest-energy seed among all clusters to be merged.
     // Use its time as the fixed reference for all timing checks below.
+    // HB only: a merge group can straddle the HB/HE overlap, and an HE reference
+    // time would be meaningless.  No HB seed leaves -999, disabling the cut.
     double refSeedTime = -999.0;
     double maxSeedEnergy = -1.0;
     for (unsigned int idx : toMerge) {
       for (const auto& frac : input[idx].recHitFractions()) {
         if (frac.recHitRef()->detId() == input[idx].seed()) {
-          if (frac.recHitRef()->energy() > maxSeedEnergy) {
+          if (frac.recHitRef()->layer() == PFLayer::HCAL_BARREL1 && frac.recHitRef()->energy() > maxSeedEnergy) {
             maxSeedEnergy = frac.recHitRef()->energy();
             refSeedTime = frac.recHitRef()->time();
           }
@@ -250,12 +252,14 @@ void PFMultiDepthClusterizer::buildClusters(const reco::PFClusterCollection& inp
       std::vector<unsigned int> toMerge = {i};
       collectLinked(i, visited, poolPrunedLinks, toMerge);
 
+      // HB-only, as in the IT pre-pass above.
       double refSeedTimeOOT = -999.0;
       double maxSeedEnergyOOT = -1.0;
       for (unsigned int idx : toMerge) {
         for (const auto& frac : currentPool[idx].recHitFractions()) {
           if (frac.recHitRef()->detId() == currentPool[idx].seed()) {
-            if (frac.recHitRef()->energy() > maxSeedEnergyOOT) {
+            if (frac.recHitRef()->layer() == PFLayer::HCAL_BARREL1 &&
+                frac.recHitRef()->energy() > maxSeedEnergyOOT) {
               maxSeedEnergyOOT = frac.recHitRef()->energy();
               refSeedTimeOOT = frac.recHitRef()->time();
             }
@@ -413,7 +417,10 @@ bool PFMultiDepthClusterizer::absorbCluster(reco::PFCluster& main,
     // Timing cut against the fixed global highest-energy seed time.
     // Rechits with default invalid time (-999) on either side bypass the cut.
     // refSeedTime < -998 (e.g. -999) disables the cut entirely (OOT pass).
-    bool oot = (_useTiming && refSeedTime > -998.0 && fraction.recHitRef()->time() > -998.0 &&
+    // HB only: HE rechits are never declared OOT, so a pure-HE stack produces no
+    // residuals and reduces exactly to the nominal multi-depth algorithm.
+    const bool inHB = (fraction.recHitRef()->layer() == PFLayer::HCAL_BARREL1);
+    bool oot = (_useTiming && inHB && refSeedTime > -998.0 && fraction.recHitRef()->time() > -998.0 &&
                 std::abs(fraction.recHitRef()->time() - refSeedTime) >= _timeThreshold);
     if (oot) {
       // Route to residual instead of dropping permanently.

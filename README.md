@@ -37,11 +37,17 @@ mv hcal_comparison.pdf hcal_comparison_<ns>ns.pdf
 cmsenv
 ./ScanTimingThresholds.sh 0 2 3 5 
 ```
-Since most of the timing checks are done at the depth cluster stacking level, the timing cut can actually be scanned by just changing a parameter in the python file (no re-compiling needed):
+Since the timing checks at the depth cluster stacking level are configurable, that threshold can be scanned by just changing a parameter in the python file (no re-compiling needed):
 ```
 emacs PFTestingAlgos/particleFlowClusterHCAL_*_cfi.py
 ```
-Edit the line `timeThreshold = cms.untracked.double(3.0),  # ns`. Make sure this is a smaller value than is listed in `Basic2DGenericTopoClusterizer_timing.cc.edit` in the line `_timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 5.0)) {}`, otherwise this should also be edited. 
+Edit the line `timeThreshold = cms.untracked.double(3),  # ns`.
+
+For Option 1 only, the gathering step has a second timing cut with its own threshold, in `Basic2DGenericTopoClusterizer_timing.cc.edit` on the line `_timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 3)) {}`. This one is **not** reachable from python — `useTiming` and `timeThreshold` are not declared in `PFClusterProducer::fillDescriptions`, so setting them in a cfi throws "Illegal parameter" — and changing it requires a recompile. Keep it at or above the python value, otherwise it dominates and the scan does nothing. Note that `./SetTimingThreshold.sh <ns>` sets both to the same value and so always needs a rebuild, which `TestAllParticleFlow.sh` does for you.
+
+For the same reason, setting `useTiming = cms.untracked.bool(False)` in the cfi only disables the stacking cut. Under Option 1 the gathering cut stays on; Options 2 and 3 install `Basic2DGenericTopoClusterizer_original.cc.edit`, so there it does disable timing entirely.
+
+Both cuts are applied to HB only (`PFLayer::HCAL_BARREL1`), since HE is removed for Phase 2. HE, HF, HO, ECAL and the preshower reduce to the nominal algorithms.
 
 ## Full Details
 The timing algorithm also places a "similar in time" constraint in the gathering step. The threshold can be further optimized as well. To use these files in the re-reco, copy the modified files and remember to recompile.
@@ -57,8 +63,9 @@ scram b -j 8
 cd PF-Reco-Analysis
 ```
 
-Option 2 (`seedTiming`): seed level timing cut vs global highest energy seed:
+Option 2 (`seedTiming`): seed level timing cut vs global highest energy seed. Only seeds are cut, not all cells, so the gathering step must be reverted to the original topo clusterizer — otherwise a previously installed Option 1 leaves its cell level cut in place and the result is a hybrid of the two:
 ```
+cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_seedTiming.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterProducer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterProducer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_seedTiming_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py
@@ -67,8 +74,9 @@ scram b -j 8
 cd PF-Reco-Analysis
 ```
 
-Option 3 (`depth1Timing`): seed level timing cut vs first depth cluster seed:
+Option 3 (`depth1Timing`): seed level timing cut vs first depth cluster seed. As for Option 2, the gathering step must be reverted to the original topo clusterizer:
 ```
+cp PF-Reco-Analysis/PFTestingAlgos/Basic2DGenericTopoClusterizer_original.cc.edit RecoParticleFlow/PFClusterProducer/plugins/Basic2DGenericTopoClusterizer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterizer_depth1Timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterizer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/PFMultiDepthClusterProducer_timing.cc.edit RecoParticleFlow/PFClusterProducer/plugins/PFMultiDepthClusterProducer.cc
 cp PF-Reco-Analysis/PFTestingAlgos/particleFlowClusterHCAL_depth1Timing_cfi.py RecoParticleFlow/PFClusterProducer/python/particleFlowClusterHCAL_cfi.py

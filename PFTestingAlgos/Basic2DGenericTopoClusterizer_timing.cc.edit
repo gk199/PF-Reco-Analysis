@@ -13,7 +13,7 @@ public:
   Basic2DGenericTopoClusterizer(const edm::ParameterSet& conf, edm::ConsumesCollector& cc)
       : InitialClusteringStepBase(conf, cc), _useCornerCells(conf.getParameter<bool>("useCornerCells")),
       _useTiming(conf.getUntrackedParameter<bool>("useTiming", true)), // timing implementation, only controled by .cc now
-      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 5)) {} // ns // PFTesting - change this
+      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 3)) {} // ns // PFTesting - change this
   ~Basic2DGenericTopoClusterizer() override = default;
   Basic2DGenericTopoClusterizer(const B2DGT&) = delete;
   B2DGT& operator=(const B2DGT&) = delete;
@@ -120,12 +120,16 @@ void Basic2DGenericTopoClusterizer::buildTopoCluster(const edm::Handle<reco::PFR
     }
   }
 
+  // HB only: HE is removed for Phase 2.  This also keeps the cut out of the other
+  // detectors sharing this plugin (ECAL, HF, HO, PS), none of which set useTiming.
+  const bool applyTiming = _useTiming && (cell_layer == PFLayer::HCAL_BARREL1);
+
   if (cell.energy() < thresholdE || cell.pt2() < thresholdPT2 ||
-      (_useTiming && cell.time() > -998.0 && seedTime > -998.0 &&
+      (applyTiming && cell.time() > -998.0 && seedTime > -998.0 &&
        std::abs(cell.time() - seedTime) >= _timeThreshold)) { // timing cut; bypass if either time is the default invalid value (-999)
     LOGDRESSED("GenericTopoCluster::buildTopoCluster()")
         << "RecHit " << cell.detId() << " with energy " << cell.energy() << " GeV, and time " << cell.time() << " relative to seed time of " << seedTime << " was rejected!." << std::endl;
-    // if (_useTiming && std::abs(cell.time() - seedTime) >= _timeThreshold) std::cout << "RecHit " << cell.detId() << " with time " << cell.time() << " relative to seed time of " << seedTime << " was rejected!." << std::endl;
+    // if (applyTiming && std::abs(cell.time() - seedTime) >= _timeThreshold) std::cout << "RecHit " << cell.detId() << " with time " << cell.time() << " relative to seed time of " << seedTime << " was rejected!." << std::endl;
     // if (cell.energy() < thresholdE) std::cout << "RecHit " << cell.detId() << " with energy " << cell.energy() << " GeV was below threshold of " << thresholdE << " GeV." << std::endl;
     // if (cell.pt2() < thresholdPT2) std::cout << "RecHit " << cell.detId() << " with pt2 " << cell.pt2() << " was below threshold of " << thresholdPT2 << "." << std::endl;
     return;
