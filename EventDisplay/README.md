@@ -1,6 +1,6 @@
 # HCAL Event Display
 
-`HCAL_pfrh_hbherh.py` is an interactive viewer for HCAL clusters in `pfObjectsNtupler` ntuples. It shows one cluster at a time, drawing its matched rechits in η–φ for each depth. The top row colors the rechits by energy and the bottom row by time.
+`HCAL_all_collections.py` is an interactive viewer for HCAL clusters in `pfObjectsNtupler` ntuples. It shows one cluster at a time, drawing its matched rechits in η–φ for each depth. The top row colors the rechits by energy and the bottom row by time.
 
 ## Rechit collections and timing
 
