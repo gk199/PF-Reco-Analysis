@@ -27,7 +27,7 @@ pip install uproot awkward numpy matplotlib
 ## Quick start
 
 ```bash
-python3 HCAL_pfrh_hbherh.py pfObjectsNtuple_standardPF.root
+python3 HCAL_all_collections.py pfObjectsNtuple_standardPF.root
 ```
 
 The filename is the only required argument. It is looked up in the current directory unless you give a full path or set `--input-dir`. At startup the script prints the branches and cuts it is using.
@@ -73,7 +73,7 @@ Use **Prev/Next Cluster** and **Prev/Next Event** to navigate; both wrap around 
 Running with just a filename is equivalent to:
 
 ```bash
-python3 HCAL_pfrh_hbherh.py <file> --input-dir . --tree-dir pfObjectsNtupler \
+python3 HCAL_all_collections.py <file> --input-dir . --tree-dir pfObjectsNtupler \
     --rechit-type pfrh --cluster-emin NONE --start-event 5
 ```
 
@@ -87,13 +87,13 @@ That is:
 
 ```bash
 # HBHE rechits, raw TDC codes, PF thresholds applied
-python3 HCAL_pfrh_hbherh.py ntuple.root --rechit-type hbhe
+python3 HCAL_all_collections.py ntuple.root --rechit-type hbhe
 
 # HBHE rechits in ns, no energy thresholds
-python3 HCAL_pfrh_hbherh.py ntuple.root --rechit-type hbhe --hbhe-time time --no-pf-energy-cuts
+python3 HCAL_all_collections.py ntuple.root --rechit-type hbhe --hbhe-time time --no-pf-energy-cuts
 
 # Only clusters above 30 GeV, from the first event
-python3 HCAL_pfrh_hbherh.py ntuple.root --cluster-emin 30 --start-event 0
+python3 HCAL_all_collections.py ntuple.root --cluster-emin 30 --start-event 0
 ```
 
 ## Things to keep in mind
