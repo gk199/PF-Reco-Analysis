@@ -13,7 +13,7 @@ public:
   Basic2DGenericTopoClusterizer(const edm::ParameterSet& conf, edm::ConsumesCollector& cc)
       : InitialClusteringStepBase(conf, cc), _useCornerCells(conf.getParameter<bool>("useCornerCells")),
       _useTiming(conf.getUntrackedParameter<bool>("useTiming", true)), // timing implementation, only controled by .cc now
-      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 5.0)) {} // ns // PFTesting - change this
+      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 0.0)) {} // ns // PFTesting - change this
   ~Basic2DGenericTopoClusterizer() override = default;
   Basic2DGenericTopoClusterizer(const B2DGT&) = delete;
   B2DGT& operator=(const B2DGT&) = delete;

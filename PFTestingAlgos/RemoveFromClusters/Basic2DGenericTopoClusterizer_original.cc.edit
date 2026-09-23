@@ -1,19 +1,15 @@
 #include "DataFormats/ParticleFlowReco/interface/PFRecHitFraction.h"
 #include "FWCore/MessageLogger/interface/MessageLogger.h"
-#include "FWCore/ParameterSet/interface/ParameterSetDescription.h"
 #include "RecoParticleFlow/PFClusterProducer/interface/InitialClusteringStepBase.h"
 #include "CondFormats/DataRecord/interface/HcalPFCutsRcd.h"
 #include "CondTools/Hcal/interface/HcalPFCutsHandler.h"
-#include "DataFormats/HcalDetId/interface/HcalDetId.h"
 
 class Basic2DGenericTopoClusterizer : public InitialClusteringStepBase {
   typedef Basic2DGenericTopoClusterizer B2DGT;
 
 public:
   Basic2DGenericTopoClusterizer(const edm::ParameterSet& conf, edm::ConsumesCollector& cc)
-      : InitialClusteringStepBase(conf, cc), _useCornerCells(conf.getParameter<bool>("useCornerCells")),
-      _useTiming(conf.getUntrackedParameter<bool>("useTiming", true)), // timing implementation, only controled by .cc now
-      _timeThreshold(conf.getUntrackedParameter<double>("timeThreshold", 5.0)) {} // ns // PFTesting - change this
+      : InitialClusteringStepBase(conf, cc), _useCornerCells(conf.getParameter<bool>("useCornerCells")) {}
   ~Basic2DGenericTopoClusterizer() override = default;
   Basic2DGenericTopoClusterizer(const B2DGT&) = delete;
   B2DGT& operator=(const B2DGT&) = delete;
@@ -26,16 +22,12 @@ public:
 
 private:
   const bool _useCornerCells;
-  // timing settings for clustering
-  const bool _useTiming;
-  const double _timeThreshold;
   void buildTopoCluster(const edm::Handle<reco::PFRecHitCollection>&,
                         const std::vector<bool>&,  // masked rechits
                         unsigned int,              //present rechit
                         std::vector<bool>&,        // hit usage state
                         reco::PFCluster&,          // the topocluster
-                        const HcalPFCuts*,
-                        double);                   // seed time for timing checks
+                        const HcalPFCuts*);
 };
 
 DEFINE_EDM_PLUGIN(InitialClusteringStepFactory, Basic2DGenericTopoClusterizer, "Basic2DGenericTopoClusterizer");
@@ -77,8 +69,7 @@ void Basic2DGenericTopoClusterizer::buildClusters(const edm::Handle<reco::PFRecH
     if (!rechitMask[seed] || !seedable[seed] || used[seed])
       continue;
     temp.reset();
-    double seedTime = (*input)[seed].time();
-    buildTopoCluster(input, rechitMask, seed, used, temp, hcalCuts, seedTime);
+    buildTopoCluster(input, rechitMask, seed, used, temp, hcalCuts);
     if (!temp.recHitFractions().empty())
       output.push_back(temp);
   }
@@ -89,8 +80,7 @@ void Basic2DGenericTopoClusterizer::buildTopoCluster(const edm::Handle<reco::PFR
                                                      unsigned int kcell,
                                                      std::vector<bool>& used,
                                                      reco::PFCluster& topocluster,
-                                                     const HcalPFCuts* hcalCuts,
-                                                     double seedTime) {
+                                                     const HcalPFCuts* hcalCuts) {
   auto const& cell = (*input)[kcell];
   int cell_layer = (int)cell.layer();
   if (cell_layer == PFLayer::HCAL_BARREL2 && std::abs(cell.positionREP().eta()) > 0.34) {
@@ -120,13 +110,9 @@ void Basic2DGenericTopoClusterizer::buildTopoCluster(const edm::Handle<reco::PFR
     }
   }
 
-  if (cell.energy() < thresholdE || cell.pt2() < thresholdPT2 ||
-      (_useTiming && std::abs(cell.time() - seedTime) >= _timeThreshold)) { // timing cut, might need to add protections for default (-999) values
+  if (cell.energy() < thresholdE || cell.pt2() < thresholdPT2) {
     LOGDRESSED("GenericTopoCluster::buildTopoCluster()")
-        << "RecHit " << cell.detId() << " with energy " << cell.energy() << " GeV, and time " << cell.time() << " relative to seed time of " << seedTime << " was rejected!." << std::endl;
-    // if (_useTiming && std::abs(cell.time() - seedTime) >= _timeThreshold) std::cout << "RecHit " << cell.detId() << " with time " << cell.time() << " relative to seed time of " << seedTime << " was rejected!." << std::endl;
-    // if (cell.energy() < thresholdE) std::cout << "RecHit " << cell.detId() << " with energy " << cell.energy() << " GeV was below threshold of " << thresholdE << " GeV." << std::endl;
-    // if (cell.pt2() < thresholdPT2) std::cout << "RecHit " << cell.detId() << " with pt2 " << cell.pt2() << " was below threshold of " << thresholdPT2 << "." << std::endl;
+        << "RecHit " << cell.detId() << " with enegy " << cell.energy() << " GeV was rejected!." << std::endl;
     return;
   }
 
@@ -146,6 +132,6 @@ void Basic2DGenericTopoClusterizer::buildTopoCluster(const edm::Handle<reco::PFR
           << " Reasons : " << used[nb] << " (used) " << !rechitMask[nb] << " (masked)." << std::endl;
       continue;
     }
-    buildTopoCluster(input, rechitMask, nb, used, topocluster, hcalCuts, seedTime);
+    buildTopoCluster(input, rechitMask, nb, used, topocluster, hcalCuts);
   }
 }
