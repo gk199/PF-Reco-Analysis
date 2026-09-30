@@ -16,18 +16,41 @@
 
 #include "DataFormats/EcalRecHit/interface/EcalRecHitCollections.h" // ECAL rechits
 #include "DataFormats/EcalRecHit/interface/EcalRecHit.h"
+#include "DataFormats/EcalDetId/interface/EBDetId.h"
+#include "DataFormats/EcalDetId/interface/EEDetId.h" 
 #include "DataFormats/DetId/interface/DetId.h"
+
+#include "DataFormats/GeometryVector/interface/GlobalPoint.h"
+#include "FWCore/Framework/interface/ESHandle.h"
+#include "DataFormats/EcalDetId/interface/EcalSubdetector.h"
+#include "FWCore/Utilities/interface/ESGetToken.h"
+
+#include "DataFormats/HcalRecHit/interface/HORecHit.h"
+#include "DataFormats/HcalRecHit/interface/HcalRecHitCollections.h"
+#include "DataFormats/HcalRecHit/interface/CaloRecHitAuxSetter.h"
 
 #include "Geometry/CaloGeometry/interface/CaloGeometry.h"
 #include "Geometry/CaloGeometry/interface/CaloCellGeometry.h"
 #include "Geometry/Records/interface/CaloGeometryRecord.h"
 #include "Geometry/CaloGeometry/interface/CaloSubdetectorGeometry.h"
 
+#include "DataFormats/ParticleFlowReco/interface/PFRecHit.h"
+#include "DataFormats/ParticleFlowReco/interface/PFRecHitFwd.h"
+#include "DataFormats/ParticleFlowReco/interface/PFRecHitFraction.h"
+#include "DataFormats/Common/interface/Ref.h"
+
 #include "DataFormats/Math/interface/deltaR.h"
 #include "Math/GenVector/PositionVector3D.h"
 
+#include "DataFormats/HepMCCandidate/interface/GenParticle.h" //GenParticle
+
 #include "TTree.h"
+#include "Rtypes.h"  // for UInt_t, ULong64_t
 #include <vector>
+#include <cmath>
+#include <utility>
+#include <unordered_map>
+
 
 class PFObjectsNtupler : public edm::one::EDAnalyzer<edm::one::SharedResources> {
 public:
@@ -40,18 +63,27 @@ private:
   // Tokens
   edm::EDGetTokenT<std::vector<reco::PFCandidate>> pfCandidatesToken_;
   edm::EDGetTokenT<std::vector<reco::PFCluster>> ecalClustersToken_;
-  edm::EDGetTokenT<std::vector<reco::PFCluster>> hcalClustersToken_;      // particleFlowClusterHCAL  (post-depth-stacking)
+  edm::EDGetTokenT<std::vector<reco::PFCluster>> hcalClustersToken_;     // particleFlowClusterHCAL  (post-depth-stacking)
+  // NEW: full event-level PF HBHE RecHit collection, independent of clustering
+  edm::EDGetTokenT<reco::PFRecHitCollection> pfHcalRecHitsToken_;
+
   edm::EDGetTokenT<edm::SortedCollection<HBHERecHit>> hbheRechitsToken_;
   edm::EDGetTokenT<EcalRecHitCollection> ebRechitsToken_;
   edm::EDGetTokenT<EcalRecHitCollection> eeRechitsToken_;
   edm::EDGetTokenT<EcalRecHitCollection> esRechitsToken_;
   edm::EDGetTokenT<std::vector<reco::PFBlock>> pfBlocksToken_;
+  edm::ESGetToken<CaloGeometry, CaloGeometryRecord> caloGeometryToken_;
   edm::EDGetTokenT<HcalUMNioDigi> uMNioToken_;
+  edm::EDGetTokenT<reco::GenParticleCollection> genParticlesToken_; //Generator Particles Info
+
 
   void beginRun(const edm::Run&, const edm::EventSetup&);
 
   // Output tree and variables
   TTree* tree_;
+  UInt_t    run_;
+  UInt_t    lumi_;
+  ULong64_t event_;
 
   // PF Candidates
   std::vector<float> pf_pt_, pf_eta_, pf_phi_, pf_energy_;
@@ -59,39 +91,145 @@ private:
 
   // ECAL clusters
   std::vector<float> ecal_energy_, ecal_eta_, ecal_phi_, ecal_time_;
-  // ECAL rechits
-  std::vector<float> eb_rechit_energy_; std::vector<float> eb_rechit_eta_; std::vector<float> eb_rechit_phi_; std::vector<float> eb_rechit_time_; std::vector<int> eb_rechit_clusterIndex_; 
+  std::vector<int> ecal_clusterIdx_;
+  // ECAL rechits:
+  // EB
+  std::vector<float> eb_rechit_energy_; std::vector<float> eb_rechit_eta_; std::vector<float> eb_rechit_phi_; 
+  std::vector<float> eb_rechit_time_; std::vector<int> eb_rechit_clusterIdx_; 
+  std::vector<int> eb_rechit_counts_;
+  // EE rechits associated to clusters
+  std::vector<float> ee_rechit_energy_; std::vector<float> ee_rechit_eta_; std::vector<float> ee_rechit_phi_; 
+  std::vector<float> ee_rechit_time_; std::vector<int> ee_rechit_clusterIdx_; 
+  std::vector<int> ee_rechit_counts_;
 
   // HCAL clusters (post-depth-stacking: particleFlowClusterHCAL)
   std::vector<float> hcal_energy_, hcal_eta_, hcal_phi_, hcal_time_, hcal_depth_;
+  std::vector<float> hcal_seed_eta_;
+  std::vector<float> hcal_seed_phi_;
+  std::vector<int>   hcal_seed_depth_;
   std::vector<int> hcal_nRecHits_;  // number of PFRecHit fractions in each cluster
-  // HBHE rechits associated to clusters (matched by DetId through PFCluster rechit fractions)
-  std::vector<float> hbhe_rechit_energy_; std::vector<float> hbhe_rechit_eta_; std::vector<float> hbhe_rechit_phi_; std::vector<float> hbhe_rechit_depth_; std::vector<float> hbhe_rechit_time_; std::vector<int> hbhe_rechit_clusterIndex_;
+  // HBHE rechits associated to clusters
+  std::vector<int> hbhe_rechit_counts_;
+  std::vector<float> hbhe_rechit_energy_; std::vector<float> hbhe_rechit_eta_; std::vector<float> hbhe_rechit_phi_; 
+  std::vector<float> hbhe_rechit_depth_; std::vector<float> hbhe_rechit_time_; std::vector<int> hbhe_rechit_tdc_; //std::vector<int> hbhe_rechit_clusterIndex_; 
+  std::vector<int> hbheRechit_clusterIdx_; std::vector<int> clusterIdx_;
+  std::vector<int> hbhe_ietaAbs_;
+  // HB and HE rechits separately
+  std::vector<int> hb_rechit_counts_;
+  std::vector<int> he_rechit_counts_;
+  std::vector<float> hb_rechit_eta_; std::vector<float> hb_rechit_phi_;
+  std::vector<float> hb_rechit_ieta_; std::vector<float> hb_rechit_iphi_;
+  std::vector<float> he_rechit_eta_; std::vector<float> he_rechit_phi_;
+  std::vector<float> he_rechit_ieta_; std::vector<float> he_rechit_iphi_;
+  std::vector<int> hb_rechit_tdc_; std::vector<int> he_rechit_tdc_;
+  std::vector<float> hb_rechit_depth_; std::vector<float> he_rechit_depth_;
+  std::vector<float> hb_rechit_energy_;
+  std::vector<float> he_rechit_energy_;
+  std::vector<int> hb_rechit_clusterIdx_;
+  std::vector<int> he_rechit_clusterIdx_;
+
+  // PF HBHE RecHits associated for HCAL
+  std::vector<float> hbhe_pfrh_energy_, hbhe_pfrh_energyFracInCluster_;
+  std::vector<double> hbhe_pfrh_eta_, hbhe_pfrh_phi_;
+  std::vector<float> hbhe_pfrh_depth_;
+  std::vector<float> hbhe_pfrh_time_; // if available
+  std::vector<int> hbhe_pfrh_clusterIdx_;
+  std::vector<int> hbhe_pfrh_counts_;
+  std::vector<float> hbhe_pfrh_fracInCluster_;
+  std::vector<int> hbhe_pfrh_ieta_;
+  std::vector<int>   hbhe_pfrh_iphi_;
+  
+
+  // PF HB and HE RecHits for HCAL
+  std::vector<float> hb_pfrh_energy_, he_pfrh_energy_;
+  std::vector<float> hb_pfrh_energyFracInCluster_, he_pfrh_energyFracInCluster_;
+  std::vector<double> hb_pfrh_eta_, he_pfrh_eta_;
+  std::vector<double> hb_pfrh_phi_, he_pfrh_phi_;
+  std::vector<float> hb_pfrh_depth_, he_pfrh_depth_;
+  std::vector<float> hb_pfrh_time_, he_pfrh_time_; // if available
+  std::vector<int> hb_pfrh_clusterIdx_, he_pfrh_clusterIdx_;
+  std::vector<int> hb_pfrh_counts_, he_pfrh_counts_;
+  std::vector<float> hb_pfrh_fracInCluster_, he_pfrh_fracInCluster_; 
+  std::vector<int>   hb_pfrh_iphi_, he_pfrh_iphi_;
+  std::vector<int> hb_pfrh_ieta_, he_pfrh_ieta_;
+
+  // NEW: all accepted PF HBHE RecHits in the event, including unclustered hits
+  // These are stored separately from the existing cluster-associated hbhe_pfrh_* branches.
+  std::vector<float> all_hbhe_pfrh_pt_;
+  std::vector<float> all_hbhe_pfrh_eta_, all_hbhe_pfrh_phi_;
+  std::vector<int> all_hbhe_pfrh_ieta_, all_hbhe_pfrh_iphi_;
+  std::vector<float> all_hbhe_pfrh_energy_;
+  std::vector<int> all_hbhe_pfrh_depth_;
+  std::vector<float> all_hbhe_pfrh_time_;
+  std::vector<int> all_hbhe_pfrh_clusterIdx_;  // -1 when the PFRecHit is not used by an HCAL cluster
+
 
   // PF Blocks (just store number of elements for now)
   int num_pfBlocks_;
 
   // uMNio
   int laserType_;
+
+  // Gen particles
+  std::vector<float> gen_pt_, gen_eta_, gen_phi_, gen_energy_;
+  std::vector<int> gen_pdgId_, gen_status_;
+  std::vector<int> gen_charge_;
+  std::vector<float> gen_vx_, gen_vy_, gen_vz_;
+
+  // Additional generator information; existing gen_* ordering is unchanged.
+  // Positions/lengths: cm; momenta/mass: GeV; estimated times: ns.
+  // reco::GenParticle has NO per-particle production/decay timestamp.
+  // Time estimates describe only this record's straight-line flight segment:
+  // dt = L*E/(|p|*c), proper dt = L*m/(|p|*c).
+  // They are not absolute event times or accumulated times along an ancestry chain.
+  // Missing/invalid floating-point values: -999; unresolved relation index: -1.
+  // All mothers/daughters are flattened, with Ngen+1 offsets (also for empty events).
+  // For particle i, mother entries are [motherOffset[i], motherOffset[i+1]);
+  // daughter entries work identically. Each index addresses the existing gen_* arrays.
+  // decayV* is inferred only when ALL immediate daughters have available, finite
+  // vertices agreeing within 1e-6 cm. It is a generator end vertex, not necessarily
+  // a physical decay: shower/history copies also have daughters. No copies are skipped.
+  // statusFlags (isLastCopy) helps identify such records.
+  // statusFlags stores all 15 CMSSW GenStatusFlags bits (see GenStatusFlags.h).
+  std::vector<float> gen_decayVx_, gen_decayVy_, gen_decayVz_, gen_decayR_, gen_decayLengthXY_, gen_decayLength3D_, gen_flightTimeEstimate_, gen_properTimeEstimate_;
+  std::vector<int> gen_statusFlags_, gen_motherOffset_, gen_daughterOffset_, gen_motherIdx_, gen_daughterIdx_;
+
 };
 
 PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
+  : caloGeometryToken_{esConsumes<CaloGeometry, CaloGeometryRecord>()}
 {
   usesResource("TFileService");
+
   pfCandidatesToken_ = consumes<std::vector<reco::PFCandidate>>(iConfig.getParameter<edm::InputTag>("pfCandidates"));
   ecalClustersToken_ = consumes<std::vector<reco::PFCluster>>(iConfig.getParameter<edm::InputTag>("ecalClusters"));
-  hcalClustersToken_  = consumes<std::vector<reco::PFCluster>>(iConfig.getParameter<edm::InputTag>("hcalClusters"));
-  hbheRechitsToken_ = consumes<edm::SortedCollection<HBHERecHit>>(edm::InputTag("hbhereco", "", "ReRECO")); // make sure this matches the input file! 
-  ebRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalRecHit", "EcalRecHitsEB", "ReRECO")); 
-  eeRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalRecHit", "EcalRecHitsEE", "ReRECO")); 
-  esRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalPreshowerRecHit", "EcalRecHitsES", "ReRECO")); 
+  hcalClustersToken_ = consumes<std::vector<reco::PFCluster>>(iConfig.getParameter<edm::InputTag>("hcalClusters"));
+  // NEW: read the complete accepted PF HBHE RecHit collection. The empty instance is the
+  // main particleFlowRecHitHBHE output; the separate "Cleaned" instance contains rejected hits.
+  pfHcalRecHitsToken_ = consumes<reco::PFRecHitCollection>(edm::InputTag("particleFlowRecHitHBHE"));
+  
+  // hbheRechitsToken_ = consumes<edm::SortedCollection<HBHERecHit>>(edm::InputTag("hbhereco", "", "ReRECO")); // make sure this matches the input file! 
+  // ebRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalRecHit", "EcalRecHitsEB", "ReRECO")); 
+  // eeRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalRecHit", "EcalRecHitsEE", "ReRECO")); 
+  // esRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalPreshowerRecHit", "EcalRecHitsES", "ReRECO")); 
+
+  hbheRechitsToken_ = consumes<edm::SortedCollection<HBHERecHit>>(iConfig.getParameter<edm::InputTag>("hbheRechits"));
+  ebRechitsToken_ = consumes<EcalRecHitCollection>(iConfig.getParameter<edm::InputTag>("ecalRechitsEB"));
+  eeRechitsToken_ = consumes<EcalRecHitCollection>(iConfig.getParameter<edm::InputTag>("ecalRechitsEE"));
+  esRechitsToken_ = consumes<EcalRecHitCollection>(iConfig.getParameter<edm::InputTag>("ecalRechitsES"));
+
   // hbheRechitsToken_ = consumes<std::vector<reco::PFRecHit>>(edm::InputTag("particleFlowRecHitHBHE", "Cleaned", "ReRECOtoAOD"));
   // hbheRechitsToken_ = consumes<std::vector<reco::PFRecHit>>(edm::InputTag("particleFlowRecHitHBHE", "", "ReRECO"));
   pfBlocksToken_ = consumes<std::vector<reco::PFBlock>>(iConfig.getParameter<edm::InputTag>("pfBlocks"));
   uMNioToken_ = mayConsume<HcalUMNioDigi>(iConfig.getUntrackedParameter<edm::InputTag>("taguMNio", edm::InputTag("hcalDigis")));
-
+  genParticlesToken_ = consumes<reco::GenParticleCollection>(iConfig.getParameter<edm::InputTag>("genParticles"));
   edm::Service<TFileService> fs;
   tree_ = fs->make<TTree>("pfTree", "PF objects");
+  
+  // Event info branches
+  tree_->Branch("run",   &run_,   "run/i");
+  tree_->Branch("lumi",  &lumi_,  "lumi/i");
+  tree_->Branch("event", &event_, "event/l");
 
   // PF candidate branches
   tree_->Branch("pf_pt", &pf_pt_);
@@ -106,6 +244,23 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
   tree_->Branch("ecal_eta", &ecal_eta_);
   tree_->Branch("ecal_phi", &ecal_phi_);
   tree_->Branch("ecal_time", &ecal_time_);
+  tree_->Branch("ecal_clusterIdx", &ecal_clusterIdx_);
+
+  // ECAL rechit branches
+  // EB rechits
+  tree_->Branch("eb_rechit_energy", &eb_rechit_energy_);
+  tree_->Branch("eb_rechit_eta", &eb_rechit_eta_);
+  tree_->Branch("eb_rechit_phi", &eb_rechit_phi_);
+  tree_->Branch("eb_rechit_time", &eb_rechit_time_);
+  tree_->Branch("eb_rechit_clusterIdx", &eb_rechit_clusterIdx_);
+  tree_->Branch("eb_rechit_counts", &eb_rechit_counts_);
+  // EE rechits
+  tree_->Branch("ee_rechit_energy", &ee_rechit_energy_);
+  tree_->Branch("ee_rechit_eta", &ee_rechit_eta_);
+  tree_->Branch("ee_rechit_phi", &ee_rechit_phi_);
+  tree_->Branch("ee_rechit_time", &ee_rechit_time_);
+  tree_->Branch("ee_rechit_clusterIdx", &ee_rechit_clusterIdx_); 
+  tree_->Branch("ee_rechit_counts", &ee_rechit_counts_);
 
   // HCAL cluster branches (post-depth-stacking: particleFlowClusterHCAL)
   tree_->Branch("hcal_energy", &hcal_energy_);
@@ -113,20 +268,127 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
   tree_->Branch("hcal_phi", &hcal_phi_);
   tree_->Branch("hcal_time", &hcal_time_);
   tree_->Branch("hcal_depth", &hcal_depth_);
+  tree_->Branch("clusterIdx", &clusterIdx_);
   tree_->Branch("hcal_nRecHits", &hcal_nRecHits_);
-  // HBHE rechit branches (matched by DetId through PFCluster rechit fractions)
+
+  tree_->Branch("hcal_seed_eta",   &hcal_seed_eta_);
+  tree_->Branch("hcal_seed_phi",   &hcal_seed_phi_);
+  tree_->Branch("hcal_seed_depth", &hcal_seed_depth_);
+
+  // HBHE rechit branches
   tree_->Branch("hbhe_rechit_energy", &hbhe_rechit_energy_);
   tree_->Branch("hbhe_rechit_eta", &hbhe_rechit_eta_);
   tree_->Branch("hbhe_rechit_phi", &hbhe_rechit_phi_);
   tree_->Branch("hbhe_rechit_depth", &hbhe_rechit_depth_);
   tree_->Branch("hbhe_rechit_time", &hbhe_rechit_time_);
-  tree_->Branch("hbhe_rechit_clusterIndex", &hbhe_rechit_clusterIndex_);
+  tree_->Branch("hbhe_rechit_tdc", &hbhe_rechit_tdc_);
+  tree_->Branch("hbheRechit_clusterIdx", &hbheRechit_clusterIdx_);
+  tree_->Branch("hbhe_rechit_ietaAbs", &hbhe_ietaAbs_);
+  tree_->Branch("hbhe_rechit_counts", &hbhe_rechit_counts_);
+
+  tree_->Branch("hb_rechit_tdc", &hb_rechit_tdc_);
+  tree_->Branch("he_rechit_tdc", &he_rechit_tdc_);
+  tree_->Branch("hb_rechit_depth", &hb_rechit_depth_);
+  tree_->Branch("he_rechit_depth", &he_rechit_depth_);
+  tree_->Branch("hb_rechit_counts", &hb_rechit_counts_);
+  tree_->Branch("he_rechit_counts", &he_rechit_counts_);
+  tree_->Branch("hb_rechit_energy", &hb_rechit_energy_);  
+  tree_->Branch("he_rechit_energy", &he_rechit_energy_);
+  tree_->Branch("hb_rechit_clusterIdx", &hb_rechit_clusterIdx_);
+  tree_->Branch("he_rechit_clusterIdx", &he_rechit_clusterIdx_);
+
+  tree_->Branch("hb_rechit_eta", &hb_rechit_eta_);
+  tree_->Branch("hb_rechit_phi", &hb_rechit_phi_);
+  tree_->Branch("hb_rechit_ieta", &hb_rechit_ieta_);
+  tree_->Branch("hb_rechit_iphi", &hb_rechit_iphi_);
+  tree_->Branch("he_rechit_eta", &he_rechit_eta_);
+  tree_->Branch("he_rechit_phi", &he_rechit_phi_);
+  tree_->Branch("he_rechit_ieta", &he_rechit_ieta_);
+  tree_->Branch("he_rechit_iphi", &he_rechit_iphi_);
+
+  
+  // PF HBHE RecHits associated to HCAL clusters
+  tree_->Branch("hbhe_pfrh_energy", &hbhe_pfrh_energy_);
+  tree_->Branch("hbhe_pfrh_energyFracInCluster", &hbhe_pfrh_energyFracInCluster_);
+  tree_->Branch("hbhe_pfrh_eta", &hbhe_pfrh_eta_);
+  tree_->Branch("hbhe_pfrh_phi", &hbhe_pfrh_phi_);
+  tree_->Branch("hbhe_pfrh_depth", &hbhe_pfrh_depth_);
+  tree_->Branch("hbhe_pfrh_time", &hbhe_pfrh_time_);
+  tree_->Branch("hbhe_pfrh_clusterIdx", &hbhe_pfrh_clusterIdx_);
+  tree_->Branch("hbhe_pfrh_counts", &hbhe_pfrh_counts_);
+  tree_->Branch("hbhe_pfrh_ieta", &hbhe_pfrh_ieta_);
+  tree_->Branch("hbhe_pfrh_iphi", &hbhe_pfrh_iphi_);
+  tree_->Branch("hbhe_pfrh_fracInCluster", &hbhe_pfrh_fracInCluster_);
+
+
+  // PF HB and HE RecHits for HCAL
+  tree_->Branch("hb_pfrh_energy", &hb_pfrh_energy_);
+  tree_->Branch("he_pfrh_energy", &he_pfrh_energy_);
+  tree_->Branch("hb_pfrh_energyFracInCluster", &hb_pfrh_energyFracInCluster_);
+  tree_->Branch("he_pfrh_energyFracInCluster", &he_pfrh_energyFracInCluster_);
+  tree_->Branch("hb_pfrh_fracInCluster", &hb_pfrh_fracInCluster_);
+  tree_->Branch("he_pfrh_fracInCluster", &he_pfrh_fracInCluster_);
+  tree_->Branch("hb_pfrh_eta", &hb_pfrh_eta_);
+  tree_->Branch("he_pfrh_eta", &he_pfrh_eta_);
+  tree_->Branch("hb_pfrh_phi", &hb_pfrh_phi_);
+  tree_->Branch("he_pfrh_phi", &he_pfrh_phi_);
+  tree_->Branch("hb_pfrh_depth", &hb_pfrh_depth_);
+  tree_->Branch("he_pfrh_depth", &he_pfrh_depth_);
+  tree_->Branch("hb_pfrh_time", &hb_pfrh_time_);
+  tree_->Branch("he_pfrh_time", &he_pfrh_time_);
+  tree_->Branch("hb_pfrh_clusterIdx", &hb_pfrh_clusterIdx_);
+  tree_->Branch("he_pfrh_clusterIdx", &he_pfrh_clusterIdx_);
+  tree_->Branch("hb_pfrh_counts", &hb_pfrh_counts_);
+  tree_->Branch("he_pfrh_counts", &he_pfrh_counts_);
+  tree_->Branch("hb_pfrh_ieta", &hb_pfrh_ieta_);
+  tree_->Branch("he_pfrh_ieta", &he_pfrh_ieta_);
+  tree_->Branch("hb_pfrh_iphi", &hb_pfrh_iphi_);
+  tree_->Branch("he_pfrh_iphi", &he_pfrh_iphi_);
+
+  // NEW: all PF HBHE RecHits in the event, whether clustered or unclustered
+  tree_->Branch("all_hbhe_pfrh_pt", &all_hbhe_pfrh_pt_);
+  tree_->Branch("all_hbhe_pfrh_eta", &all_hbhe_pfrh_eta_);
+  tree_->Branch("all_hbhe_pfrh_phi", &all_hbhe_pfrh_phi_);
+  tree_->Branch("all_hbhe_pfrh_ieta", &all_hbhe_pfrh_ieta_);
+  tree_->Branch("all_hbhe_pfrh_iphi", &all_hbhe_pfrh_iphi_);
+  tree_->Branch("all_hbhe_pfrh_energy", &all_hbhe_pfrh_energy_);
+  tree_->Branch("all_hbhe_pfrh_depth", &all_hbhe_pfrh_depth_);
+  tree_->Branch("all_hbhe_pfrh_time", &all_hbhe_pfrh_time_);
+  tree_->Branch("all_hbhe_pfrh_clusterIdx", &all_hbhe_pfrh_clusterIdx_);
+ 
+  //Generator Particle Info
+  tree_->Branch("gen_pt", &gen_pt_);
+  tree_->Branch("gen_eta", &gen_eta_);
+  tree_->Branch("gen_phi", &gen_phi_);
+  tree_->Branch("gen_energy", &gen_energy_);
+  tree_->Branch("gen_pdgId", &gen_pdgId_);
+  tree_->Branch("gen_status", &gen_status_);
+  tree_->Branch("gen_charge", &gen_charge_);
+  tree_->Branch("gen_vx", &gen_vx_);
+  tree_->Branch("gen_vy", &gen_vy_);
+  tree_->Branch("gen_vz", &gen_vz_);
+
+  tree_->Branch("gen_decayVx", &gen_decayVx_);
+  tree_->Branch("gen_decayVy", &gen_decayVy_);
+  tree_->Branch("gen_decayVz", &gen_decayVz_);
+  tree_->Branch("gen_decayR", &gen_decayR_);
+  tree_->Branch("gen_decayLengthXY", &gen_decayLengthXY_);
+  tree_->Branch("gen_decayLength3D", &gen_decayLength3D_);
+  tree_->Branch("gen_flightTimeEstimate", &gen_flightTimeEstimate_);
+  tree_->Branch("gen_properTimeEstimate", &gen_properTimeEstimate_);
+  tree_->Branch("gen_statusFlags", &gen_statusFlags_);
+  tree_->Branch("gen_motherOffset", &gen_motherOffset_);
+  tree_->Branch("gen_daughterOffset", &gen_daughterOffset_);
+  tree_->Branch("gen_motherIdx", &gen_motherIdx_);
+  tree_->Branch("gen_daughterIdx", &gen_daughterIdx_);
+
 
   // PF block info
   tree_->Branch("num_pfBlocks", &num_pfBlocks_);
 
   // uMNio
   tree_->Branch("laserType", &laserType_);
+
 }
 
 // Convert ieta to eta using HCAL mapping
@@ -153,9 +415,9 @@ static double hcalEtaFromIeta(int ieta) {
 }
 
 // Convert iphi to phi (HB/HE have 72 phi bins)
-double hcalPhiFromIphi(int iphi) {
+static double hcalPhiFromIphi(int iphi) {
     // HCAL iphi runs from 1..72
-    double phi = (iphi - 1) * (M_PI / 36.0); // 2pi/72
+    double phi = (iphi - 0.5) * (M_PI / 36.0); // 2pi/72
     // Put phi into -pi, pi
     if (phi > M_PI) phi -= 2.0 * M_PI;
 
@@ -173,19 +435,145 @@ inline std::pair<double,double> hcalEtaPhiFromDetId(const HcalDetId& detid) {
     return {eta, phi};
 }
 
-void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup&)
+
+void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 {
   // Clear all vectors
   pf_pt_.clear(); pf_eta_.clear(); pf_phi_.clear(); pf_energy_.clear(); pf_charge_.clear(); pf_pdgId_.clear();
+  
   ecal_energy_.clear(); ecal_eta_.clear(); ecal_phi_.clear(); ecal_time_.clear();
-  hcal_energy_.clear(); hcal_eta_.clear(); hcal_phi_.clear(); hcal_time_.clear(); hcal_depth_.clear(); hcal_nRecHits_.clear();
-  hbhe_rechit_energy_.clear(); hbhe_rechit_eta_.clear(); hbhe_rechit_phi_.clear(); hbhe_rechit_depth_.clear(); hbhe_rechit_time_.clear(); hbhe_rechit_clusterIndex_.clear();
+  ecal_clusterIdx_.clear();
+
+  eb_rechit_energy_.clear(); eb_rechit_eta_.clear(); eb_rechit_phi_.clear(); eb_rechit_time_.clear(); eb_rechit_clusterIdx_.clear();
+  ee_rechit_energy_.clear(); ee_rechit_eta_.clear(); ee_rechit_phi_.clear(); 
+  ee_rechit_time_.clear(); ee_rechit_clusterIdx_.clear();
+  ee_rechit_counts_.clear();
+  eb_rechit_counts_.clear(); 
+
+  hcal_energy_.clear(); hcal_eta_.clear(); hcal_phi_.clear(); hcal_time_.clear(); hcal_depth_.clear();
+  hcal_seed_eta_.clear(); hcal_seed_phi_.clear(); hcal_seed_depth_.clear(); hcal_nRecHits_.clear();
+
+  hbhe_rechit_energy_.clear(); hbhe_rechit_eta_.clear(); 
+  hbhe_rechit_phi_.clear(); hbhe_rechit_depth_.clear(); hbhe_rechit_time_.clear(); //hbhe_rechit_clusterIndex_.clear();
+  hbhe_rechit_tdc_.clear();
+  hbheRechit_clusterIdx_.clear(); clusterIdx_.clear();
+  hbhe_ietaAbs_.clear();
+  hbhe_rechit_counts_.clear();
+
+  hb_rechit_tdc_.clear(); he_rechit_tdc_.clear();
+  hb_rechit_depth_.clear();
+  he_rechit_depth_.clear();
+  hb_rechit_counts_.clear();  
+  he_rechit_counts_.clear(); 
+  hb_rechit_energy_.clear();
+  he_rechit_energy_.clear();
+  hb_rechit_clusterIdx_.clear();
+  he_rechit_clusterIdx_.clear();
+
+  hb_rechit_eta_.clear(); hb_rechit_phi_.clear(); hb_rechit_ieta_.clear(); hb_rechit_iphi_.clear();
+  he_rechit_eta_.clear(); he_rechit_phi_.clear(); he_rechit_ieta_.clear(); he_rechit_iphi_.clear();
+
+  hbhe_pfrh_energy_.clear(); hbhe_pfrh_energyFracInCluster_.clear();
+  hbhe_pfrh_eta_.clear(); hbhe_pfrh_phi_.clear();
+  hbhe_pfrh_depth_.clear();
+  hbhe_pfrh_time_.clear();
+  hbhe_pfrh_clusterIdx_.clear();
+  hbhe_pfrh_counts_.clear();
+  hbhe_pfrh_ieta_.clear();
+  hbhe_pfrh_iphi_.clear();
+  hbhe_pfrh_fracInCluster_.clear();
+
+  hb_pfrh_energy_.clear(); he_pfrh_energy_.clear();
+  hb_pfrh_energyFracInCluster_.clear(); he_pfrh_energyFracInCluster_.clear();
+  hb_pfrh_eta_.clear(); he_pfrh_eta_.clear();
+  hb_pfrh_phi_.clear(); he_pfrh_phi_.clear();
+  hb_pfrh_depth_.clear(); he_pfrh_depth_.clear();
+  hb_pfrh_time_.clear(); he_pfrh_time_.clear();
+  hb_pfrh_clusterIdx_.clear(); he_pfrh_clusterIdx_.clear();
+  hb_pfrh_counts_.clear(); he_pfrh_counts_.clear();
+  hb_pfrh_ieta_.clear(); he_pfrh_ieta_.clear();
+  hb_pfrh_iphi_.clear(); he_pfrh_iphi_.clear();
+  hb_pfrh_fracInCluster_.clear(); he_pfrh_fracInCluster_.clear();
+
+  // NEW: clear event-level all-PF-HBHE-RecHit branches
+  all_hbhe_pfrh_pt_.clear();
+  all_hbhe_pfrh_eta_.clear(); all_hbhe_pfrh_phi_.clear();
+  all_hbhe_pfrh_ieta_.clear(); all_hbhe_pfrh_iphi_.clear();
+  all_hbhe_pfrh_energy_.clear();
+  all_hbhe_pfrh_depth_.clear();
+  all_hbhe_pfrh_time_.clear();
+  all_hbhe_pfrh_clusterIdx_.clear();
+
+  gen_pt_.clear();
+  gen_eta_.clear();
+  gen_phi_.clear();
+  gen_energy_.clear();
+  gen_pdgId_.clear();
+  gen_status_.clear();
+  gen_charge_.clear();
+  gen_vx_.clear();
+  gen_vy_.clear();
+  gen_vz_.clear();
+  gen_decayVx_.clear();
+  gen_decayVy_.clear();
+  gen_decayVz_.clear();
+  gen_decayR_.clear();
+  gen_decayLengthXY_.clear();
+  gen_decayLength3D_.clear();
+  gen_flightTimeEstimate_.clear();
+  gen_properTimeEstimate_.clear();
+  gen_statusFlags_.clear();
+  gen_motherOffset_.clear();
+  gen_daughterOffset_.clear();
+  gen_motherIdx_.clear();
+  gen_daughterIdx_.clear();
+  gen_motherOffset_.push_back(0);
+  gen_daughterOffset_.push_back(0);
+
+  auto fill_pfrh = [&](auto& pfrh_energy,
+                      auto& pfrh_energyFracInCluster,
+                      auto& pfrh_fracInCluster,
+                      auto& pfrh_eta,
+                      auto& pfrh_phi,
+                      auto& pfrh_depth,
+                      auto& pfrh_clusterIdx,
+                      auto& pfrh_ieta,
+                      auto& pfrh_iphi,
+                      auto& pfrh_time,
+                      float  energy,
+                      float  energyFracInCluster,
+                      float  fracInCluster,
+                      double eta,          // <-- was float
+                      double phi,          // <-- was float
+                      int    depth,
+                      int    clusterIdx,
+                      int    ieta,
+                      int    iphi,
+                      float  time)
+  {
+    pfrh_energy.push_back(energy);
+    pfrh_energyFracInCluster.push_back(energyFracInCluster);
+    pfrh_fracInCluster.push_back(fracInCluster);
+    pfrh_eta.push_back(eta);
+    pfrh_phi.push_back(phi);
+    pfrh_depth.push_back(depth);
+    pfrh_clusterIdx.push_back(clusterIdx);
+    pfrh_ieta.push_back(ieta);
+    pfrh_iphi.push_back(iphi);
+    pfrh_time.push_back(time);
+  };
+
   num_pfBlocks_ = 0;
   laserType_ = -1000;
 
   // PF Candidates
   edm::Handle<std::vector<reco::PFCandidate>> pfCandidates;
   iEvent.getByToken(pfCandidatesToken_, pfCandidates);
+
+  run_   = iEvent.id().run();
+  lumi_  = iEvent.id().luminosityBlock();
+  event_ = iEvent.id().event();
+
   if (pfCandidates.isValid()) {
     for (const auto& cand : *pfCandidates) {
       pf_pt_.push_back(cand.pt());
@@ -197,17 +585,112 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup&)
     }
   }
 
+  edm::Handle<reco::GenParticleCollection> genParticles;
+  iEvent.getByToken(genParticlesToken_, genParticles);
+
+  if (genParticles.isValid()) {
+    // Pointer lookup avoids assuming that references always target this collection.
+    std::unordered_map<const reco::Candidate*, int> genIndex;
+    for (size_t i = 0; i < genParticles->size(); ++i)
+      genIndex.emplace(&(*genParticles)[i], static_cast<int>(i));
+    const auto indexOf = [&genIndex](const reco::Candidate* particle) {
+      const auto found = genIndex.find(particle);
+      return found == genIndex.end() ? -1 : found->second;
+    };
+    constexpr double missing = -999.;
+    constexpr double cCmPerNs = 29.9792458;
+    constexpr double vertexToleranceCm = 1.e-6;
+    for (const auto& gen : *genParticles) {
+      gen_pt_.push_back(gen.pt());
+      gen_eta_.push_back(gen.eta());
+      gen_phi_.push_back(gen.phi());
+      gen_energy_.push_back(gen.energy());
+      gen_pdgId_.push_back(gen.pdgId());
+      gen_status_.push_back(gen.status());
+      gen_charge_.push_back(gen.charge());
+      gen_vx_.push_back(gen.vx());
+      gen_vy_.push_back(gen.vy());
+      gen_vz_.push_back(gen.vz());
+
+      gen_statusFlags_.push_back(static_cast<int>(gen.statusFlags().flags_.to_ulong()));
+      const double momentum = gen.p();
+      const double energy = gen.energy();
+      const double mass = gen.mass();
+      const bool validMomentum = std::isfinite(momentum) && std::isfinite(energy) &&
+                                 momentum > 0. && energy > 0.;
+
+      for (size_t j = 0; j < gen.numberOfMothers(); ++j) {
+        const auto ref = gen.motherRef(j);
+        const reco::Candidate* mother = ref.isNonnull() && ref.isAvailable() ? ref.get() : nullptr;
+        gen_motherIdx_.push_back(indexOf(mother));
+      }
+      gen_motherOffset_.push_back(static_cast<int>(gen_motherIdx_.size()));
+
+      bool commonVertex = gen.numberOfDaughters() > 0;
+      bool haveVertex = false;
+      double decayX = missing, decayY = missing, decayZ = missing;
+      for (size_t j = 0; j < gen.numberOfDaughters(); ++j) {
+        const auto ref = gen.daughterRef(j);
+        const reco::Candidate* daughter = ref.isNonnull() && ref.isAvailable() ? ref.get() : nullptr;
+        gen_daughterIdx_.push_back(indexOf(daughter));
+        if (!daughter || !std::isfinite(daughter->vx()) ||
+            !std::isfinite(daughter->vy()) || !std::isfinite(daughter->vz())) {
+          commonVertex = false;
+          continue;
+        }
+        if (!haveVertex) {
+          decayX = daughter->vx(); decayY = daughter->vy(); decayZ = daughter->vz();
+          haveVertex = true;
+        } else if (std::hypot(std::hypot(daughter->vx() - decayX, daughter->vy() - decayY),
+                              daughter->vz() - decayZ) > vertexToleranceCm) {
+          commonVertex = false;
+        }
+      }
+      gen_daughterOffset_.push_back(static_cast<int>(gen_daughterIdx_.size()));
+      commonVertex = commonVertex && haveVertex;
+      gen_decayVx_.push_back(commonVertex ? decayX : missing);
+      gen_decayVy_.push_back(commonVertex ? decayY : missing);
+      gen_decayVz_.push_back(commonVertex ? decayZ : missing);
+      gen_decayR_.push_back(commonVertex ? std::hypot(decayX, decayY) : missing);
+
+      double lengthXY = missing, length3D = missing;
+      double flightTime = missing, properTime = missing;
+      if (commonVertex && std::isfinite(gen.vx()) && std::isfinite(gen.vy()) && std::isfinite(gen.vz())) {
+        const double dx = decayX - gen.vx(), dy = decayY - gen.vy(), dz = decayZ - gen.vz();
+        lengthXY = std::hypot(dx, dy);
+        length3D = std::hypot(lengthXY, dz);
+        // Straight-line, constant-momentum estimates. Not valid for arbitrary shower
+        // histories or curved trajectories.
+        // A particle at rest has no inferable lifetime from spatial displacement.
+        if (validMomentum) {
+          flightTime = length3D * energy / (momentum * cCmPerNs);
+          if (std::isfinite(mass) && mass > 0.)
+            properTime = length3D * mass / (momentum * cCmPerNs);
+        }
+      }
+      gen_decayLengthXY_.push_back(lengthXY);
+      gen_decayLength3D_.push_back(length3D);
+      gen_flightTimeEstimate_.push_back(flightTime);
+      gen_properTimeEstimate_.push_back(properTime);
+
+    }
+  }
+
+  // Get calorimeter geometry
+
+  const CaloGeometry& caloGeom = iSetup.getData(caloGeometryToken_);
+
+  // Get EB subdetector geometry once per event
+  const CaloSubdetectorGeometry* ebGeometry =
+    caloGeom.getSubdetectorGeometry(DetId::Ecal, EcalBarrel);
+
+  // Get EE subdetector geometry 
+  const CaloSubdetectorGeometry* eeGeometry =
+    caloGeom.getSubdetectorGeometry(DetId::Ecal, EcalEndcap);
+
   // ECAL Clusters
   edm::Handle<std::vector<reco::PFCluster>> ecalClusters;
   iEvent.getByToken(ecalClustersToken_, ecalClusters);
-  if (ecalClusters.isValid()) {
-    for (const auto& cl : *ecalClusters) {
-      ecal_energy_.push_back(cl.energy());
-      ecal_eta_.push_back(cl.eta());
-      ecal_phi_.push_back(cl.phi());
-      ecal_time_.push_back(cl.time());
-    }
-  }
 
   // ECAL RecHits 
   edm::Handle<EcalRecHitCollection> ebRecHits;
@@ -216,44 +699,479 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup&)
   iEvent.getByToken(ebRechitsToken_, ebRecHits);
   iEvent.getByToken(eeRechitsToken_, eeRecHits);
   iEvent.getByToken(esRechitsToken_, esRecHits);
+  
+  int ecal_clusterIndex = 0;
+
+  // Loop over ecal clusters, and for each cluster loop over eb and ee rechits 
+  if (ecalClusters.isValid()) {
+    for (const auto& cl : *ecalClusters) {
+      
+      // Save the ecal cluster info
+      ecal_energy_.push_back(cl.energy());
+      ecal_eta_.push_back(cl.eta());
+      ecal_phi_.push_back(cl.phi());
+      ecal_time_.push_back(cl.time());
+      ecal_clusterIdx_.push_back(ecal_clusterIndex);
+
+      // Loop over EB rechits   
+      if (ebRecHits.isValid()) {
+        int eb_count = 0;
+        for (const auto& rh : *ebRecHits) {
+
+          eb_count++;
+
+          // Raw detid for this rechit
+          DetId detid = rh.id();
+          // Check to make sure that we are in Ecal Barrel; if not, skip.
+          if (detid.subdetId() != EcalBarrel) continue;
+
+          // Convert the generic DetId into an ECAL-barrel-specific ID
+          EBDetId ebid(detid);
+
+          // Get position info of the cell from EB rechit geometry
+          const CaloCellGeometry* cell = ebGeometry->getGeometry(ebid);
+          if (!cell) continue;
+
+          // Ask the geometry object for the center position of this crystal
+          GlobalPoint pos = cell->getPosition();
+          double rh_eta = pos.eta();
+          double rh_phi = pos.phi();
+
+          //Select hits that are close to the cluster
+          if (std::abs(rh_eta - cl.eta()) > 0.4) continue;
+          if (reco::deltaR(cl.eta(), cl.phi(), rh_eta, rh_phi) > 0.4) continue; //Note: originally 0.2
+
+          // Save the rechit info
+          eb_rechit_energy_.push_back(rh.energy());
+          eb_rechit_eta_.push_back(rh_eta);
+          eb_rechit_phi_.push_back(rh_phi);
+          eb_rechit_time_.push_back(rh.time());
+          eb_rechit_clusterIdx_.push_back(ecal_clusterIndex); // save cluster index association
+        }
+        eb_rechit_counts_.push_back(eb_count);
+      }
+      
+      // Loop over EE rechits   
+      if (eeRecHits.isValid()) {
+        int ee_count = 0;
+
+        for (const auto& rh : *eeRecHits) {
+          ee_count++;
+         
+          // Raw detid for this rechit
+          DetId detid = rh.id();
+          if (detid.subdetId() != EcalEndcap) continue;  
+
+          //Get Ecal Endcap-specific DetId
+          EEDetId eeid(detid);
+
+          //Get geometry for this EE cell
+          const CaloCellGeometry* cell = eeGeometry->getGeometry(eeid);
+          if (!cell) continue;
+
+          //Get position in global coordinates
+          GlobalPoint pos = cell->getPosition();
+          double rh_eta = pos.eta();
+          double rh_phi = pos.phi();
+
+          if (std::abs(rh_eta - cl.eta()) > 0.4) continue;
+          if (reco::deltaR(cl.eta(), cl.phi(), rh_eta, rh_phi) > 0.4) continue;
+
+          // Save the rechit info
+          ee_rechit_energy_.push_back(rh.energy());
+          ee_rechit_eta_.push_back(rh_eta);
+          ee_rechit_phi_.push_back(rh_phi); 
+          ee_rechit_time_.push_back(rh.time());
+          ee_rechit_clusterIdx_.push_back(ecal_clusterIndex); // save cluster index association
+        }
+        ee_rechit_counts_.push_back(ee_count);
+      }
+      ecal_clusterIndex++;
+    }
+
+  }
 
   // HCAL Clusters (post-depth-stacking: particleFlowClusterHCAL)
   edm::Handle<std::vector<reco::PFCluster>> hcalClusters;
   iEvent.getByToken(hcalClustersToken_, hcalClusters);
 
-  // HBHE RecHits (raw rechits)
+  // NEW: get the full PF HBHE RecHit collection once per event, outside the cluster loop.
+  // One vector entry is reserved per PFRecHit so its cluster association can be recorded.
+  edm::Handle<reco::PFRecHitCollection> allHcalPFRecHits;
+  iEvent.getByToken(pfHcalRecHitsToken_, allHcalPFRecHits);
+  std::vector<int> allHcalPFRecHitClusterIdx(
+      allHcalPFRecHits.isValid() ? allHcalPFRecHits->size() : 0, -1);
+
+  // PF HBHE RecHits (raw rechits)
   edm::Handle<edm::SortedCollection<HBHERecHit>> hbheRechits;
   iEvent.getByToken(hbheRechitsToken_, hbheRechits);
+  // PF Rechits cuts for 2025: https://indico.cern.ch/event/1604363/#3-hcal-hcal-scale-summary-of-i
+  static const std::vector<float> HB_depth_Emin = {0.6, 0.4, 0.4, 0.5};
+  static const std::vector<float> HE_depth_Emin = {0.2, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3};
 
+  int clusterIndex = 0;
   if (hcalClusters.isValid()) {
     for (const auto& cl : *hcalClusters) {
+
+      DetId seedDetId = cl.seed();
+      // Defaults (in case seed/cell is invalid)
+      
+      float seed_eta = -999.f;
+      float seed_phi = -999.f;
+      int seed_depth = -999;
+
+      // Seed cell indices (HCAL only)
+      if (seedDetId.rawId() != 0 && seedDetId.det() == DetId::Hcal) {
+          HcalDetId hcalSeed(seedDetId);
+          seed_depth = hcalSeed.depth();
+      }
+
+      // Seed geometric eta/phi from CaloGeometry
+      if (seedDetId.rawId() != 0) {
+          const CaloCellGeometry* cell = caloGeom.getGeometry(seedDetId);
+          if (cell) {
+              const GlobalPoint& p = cell->getPosition();
+              seed_eta = p.eta();
+              seed_phi = p.phi();
+          }
+      }
+
+      clusterIdx_.push_back(clusterIndex);
       hcal_energy_.push_back(cl.energy());
       hcal_eta_.push_back(cl.eta());
       hcal_phi_.push_back(cl.phi());
       hcal_time_.push_back(cl.time());
       hcal_depth_.push_back(cl.depth());
       hcal_nRecHits_.push_back((int)cl.recHitFractions().size());
+      
+      // New seed branches
+      hcal_seed_eta_.push_back(seed_eta);
+      hcal_seed_phi_.push_back(seed_phi);
+      hcal_seed_depth_.push_back(seed_depth);
+
+      
 
       int clIdx = (int)hcal_energy_.size() - 1;
 
-      // Match HBHE rechits to this cluster via hitsAndFractions() — stores DetIds
-      // directly in CaloCluster, avoiding a Ref<PFRecHitCollection> dereference
-      // that fails when particleFlowRecHitHBHE is not saved in the input file.
+      // Loop over HBHE rechits (linked geometrically) associated to this HCAL cluster. Stored as hbhereco, these are the raw ones instead of PF (since that was a transitory collection)
       if (hbheRechits.isValid()) {
-        for (const auto& [detIdRaw, fraction] : cl.hitsAndFractions()) {
-          HcalDetId detid(detIdRaw);
-          auto it = hbheRechits->find(detid);
-          if (it == hbheRechits->end()) continue;
+
+        int hbhe_count = 0;
+        int hb_count = 0;
+        int he_count = 0;
+
+        for (const auto& rh : *hbheRechits) {
+
+          hbhe_count++;
+          hbhe_rechit_counts_.push_back(hbhe_count);
+
+          // Get position info from HBHE rechit geometry
+          // Takes the HCAL rechit’s detector ID and turns it into an HcalDetId object
+          //rh.id() = raw DetId of the cell that the rechit corresponds to
+          HcalDetId detid = rh.id();
+          // std::cout << "Hit energy: " << rh.energy()
+          //     << " detId: " << detid.rawId()
+          //     << " depth: " << detid.depth() << std::endl;
 
           auto [rh_eta, rh_phi] = hcalEtaPhiFromDetId(detid);
-          hbhe_rechit_energy_.push_back(it->energy());
+
+          if (std::abs(rh_eta - cl.eta()) > 0.4) continue;
+          if (reco::deltaR(cl.eta(), cl.phi(), rh_eta, rh_phi) > 0.4) continue;
+
+          // ---------------- depth-dependent cut (RAW HBHE rechits) ----------------
+          float Emin = -1.0f;
+          const int depth   = detid.depth();
+          const int ietaAbs = detid.ietaAbs();
+
+          // --- current boundary-based HB/HE choice ---
+          const bool isHE_boundary = ( (depth == 4 && ietaAbs == 16) || (ietaAbs > 16) );
+          const bool isHB_boundary = !isHE_boundary;
+
+          if (isHB_boundary) {
+            if (depth >= 1 && depth <= (int)HB_depth_Emin.size())
+              Emin = HB_depth_Emin[depth - 1];
+          } else { // HE by boundary
+            if (depth >= 1 && depth <= (int)HE_depth_Emin.size())
+              Emin = HE_depth_Emin[depth - 1];
+          }
+
+          /*
+          // --- Preferred / cleaner choice: use the official subdetector ---
+          // 
+          // const int subdet = detid.subdetId();  // HcalBarrel / HcalEndcap
+          // if (subdet == HcalBarrel) {
+          //   if (depth >= 1 && depth <= (int)HB_depth_Emin.size())
+          //     Emin = HB_depth_Emin[depth - 1];
+          // } else if (subdet == HcalEndcap) {
+          //   if (depth >= 1 && depth <= (int)HE_depth_Emin.size())
+          //     Emin = HE_depth_Emin[depth - 1];
+          // } else {
+          //   continue; // should not happen for HBHERecHit
+          // }
+          */
+
+          // If depth is out of range, drop it
+          if (Emin < 0.0f) continue;
+
+          // Apply the cut on rechit energy
+          if (rh.energy() < Emin) continue;
+// ------------------------------------------------------------------------
+
+          // Save the rechit info
+          hbhe_rechit_energy_.push_back(rh.energy());
           hbhe_rechit_eta_.push_back(rh_eta);
           hbhe_rechit_phi_.push_back(rh_phi);
           hbhe_rechit_depth_.push_back(detid.depth());
-          hbhe_rechit_time_.push_back(it->time());
-          hbhe_rechit_clusterIndex_.push_back(clIdx);
+          hbhe_ietaAbs_.push_back(ietaAbs);
+
+          // Getting TDC value from auxTDC field
+          int six_bits_mask = 0x3f;  // 6-bit mask
+          int ts = 3;                // TS3 is SOI
+          int SOI_TDC = CaloRecHitAuxSetter::getField(rh.auxTDC(), six_bits_mask, ts * 6);
+          hbhe_rechit_tdc_.push_back(SOI_TDC);  //  pushback TDC value
+          hbhe_rechit_time_.push_back(rh.time()); // MAHI reconstructed time
+
+          // Saving HB and HE info separately
+          if ( (detid.depth() == 4 && detid.ietaAbs() == 16) || (detid.ietaAbs() > 16) ) {
+            // HE rechit
+            he_rechit_tdc_.push_back(SOI_TDC);
+            he_rechit_depth_.push_back(detid.depth());
+            he_count++;
+            he_rechit_counts_.push_back(he_count);
+            he_rechit_energy_.push_back(rh.energy());
+            he_rechit_clusterIdx_.push_back(clusterIndex); 
+            he_rechit_eta_.push_back(rh_eta);
+            he_rechit_phi_.push_back(rh_phi);
+            he_rechit_ieta_.push_back(detid.ieta());
+            he_rechit_iphi_.push_back(detid.iphi());
+          } else {
+            // HB rechit
+            hb_rechit_tdc_.push_back(SOI_TDC);
+            hb_rechit_depth_.push_back(detid.depth());
+            hb_count++;
+            hb_rechit_counts_.push_back(hb_count);
+            hb_rechit_energy_.push_back(rh.energy());
+            hb_rechit_clusterIdx_.push_back(clusterIndex);
+            hb_rechit_eta_.push_back(rh_eta);
+            hb_rechit_phi_.push_back(rh_phi);
+            hb_rechit_ieta_.push_back(detid.ieta());
+            hb_rechit_iphi_.push_back(detid.iphi());
+          }
+          
+          hbheRechit_clusterIdx_.push_back(clusterIndex); // save cluster index association so it is possible to map backwards to the cluster this rechit was near);
+          //hbhe_rechit_clusterIndex_.push_back(hcal_energy_.size() - 1); // save cluster index association so it is possible to map backwards to the cluster this rechit was near
         }
       }
+
+      // Loop over PF RecHits associated to this HCAL cluster
+      // loop the PFRecHits that make up this PFCluster
+
+      int hebh_pfrh_count = 0;
+      int hb_pfrh_count = 0;
+      int he_pfrh_count = 0;
+
+      for (const auto& hitRefAndFrac : cl.recHitFractions()) 
+      {
+        const auto& pfrh_ref = hitRefAndFrac.recHitRef();
+        if (pfrh_ref.isNull()) {
+          std::cout << "[PFObjectsNtupler] PFRecHit ref is NULL\n";
+          continue;
+        }
+        if (!pfrh_ref.isAvailable()) {
+          std::cout << "[PFObjectsNtupler] PFRecHit ref NOT AVAILABLE. ProductID=" << pfrh_ref.id()
+                    << " key=" << pfrh_ref.key()
+                    << " run:lumi:event=" << iEvent.id().run() << ":" << iEvent.id().luminosityBlock() << ":" << iEvent.id().event()
+                    << "\n";
+          continue;
+        }
+
+        // std::cout << "[PFObjectsNtupler] PFRecHit ref AVAILABLE. ProductID=" << pfrh_ref.id()
+        //           << " key=" << pfrh_ref.key() << "\n";
+
+        // NEW: record the first HCAL cluster using this PFRecHit. The reference key is
+        // the index of the hit in the full particleFlowRecHitHBHE collection.
+        if (allHcalPFRecHits.isValid() &&
+            pfrh_ref.id() == allHcalPFRecHits.id() &&
+            pfrh_ref.key() < allHcalPFRecHitClusterIdx.size() &&
+            allHcalPFRecHitClusterIdx[pfrh_ref.key()] < 0) {
+          allHcalPFRecHitClusterIdx[pfrh_ref.key()] = clusterIndex;
+        }
+
+        const reco::PFRecHit& pfrh = *pfrh_ref;   // <-- keep ONLY THIS ONE
+
+
+        DetId pfrh_did(pfrh.detId());
+        if (pfrh_did.det() != DetId::Hcal) continue;
+
+        HcalDetId pfrh_hid(pfrh.detId());
+        const int pfrh_depth = pfrh_hid.depth();
+        const int pfrh_ieta  = pfrh_hid.ieta();
+        const int pfrh_iphi  = pfrh_hid.iphi();
+        const auto pfrh_subdet = pfrh_hid.subdet();
+
+        // --- eta/phi from geometry (cell center) ---
+        float pfrh_eta = -999.f;
+        float pfrh_phi = -999.f;
+
+        const CaloCellGeometry* cell = caloGeom.getGeometry(pfrh_did);
+        if (cell) {
+          const GlobalPoint& pos = cell->getPosition();
+          pfrh_eta = pos.eta();
+          pfrh_phi = pos.phi();
+        } else {
+          // Fallback: compute eta/phi from ieta/iphi using HCAL mapping
+          pfrh_eta = hcalEtaFromIeta(pfrh_ieta);
+          pfrh_phi = hcalPhiFromIphi(pfrh_iphi);
+        }
+
+        // ---------------- depth-dependent cut ----------------
+        // choose the right per-depth threshold
+        //float Emin = -1.0f;
+
+        //if (pfrh_subdet == HcalBarrel) {
+          //if (pfrh_depth >= 1 && pfrh_depth <= (int)HB_depth_Emin.size())
+            //Emin = HB_depth_Emin[pfrh_depth - 1];
+        //} else if (pfrh_subdet == HcalEndcap) {
+          //if (pfrh_depth >= 1 && pfrh_depth <= (int)HE_depth_Emin.size())
+            //Emin = HE_depth_Emin[pfrh_depth - 1];
+        //} else {
+          //continue;  // ignore HF/HO
+        //}
+
+        // if depth is out of range, drop it
+        //if (Emin < 0.0f) continue;
+
+        // APPLY the cut on PFRecHit energy
+        //if (pfrh.energy() < Emin) continue;
+        // ------------------------------------
+
+        const float pfrh_frac = hitRefAndFrac.fraction();
+        // returns (eta, phi) from an HcalDetId
+        // auto [pfrh_eta, pfrh_phi] = hcalEtaPhiFromDetId(pfrh_hid);
+
+        const bool isHB = (pfrh_subdet == HcalBarrel);
+        const bool isHE = (pfrh_subdet == HcalEndcap);
+
+        const float energy = pfrh.energy();
+        const float fracInCluster = pfrh_frac;
+        const float energyFracInCluster = energy * fracInCluster;
+        const float time = pfrh.time();
+
+        // ALWAYS fill HBHE (combined)
+        fill_pfrh(hbhe_pfrh_energy_,
+                  hbhe_pfrh_energyFracInCluster_,
+                  hbhe_pfrh_fracInCluster_,
+                  hbhe_pfrh_eta_,
+                  hbhe_pfrh_phi_,
+                  hbhe_pfrh_depth_,
+                  hbhe_pfrh_clusterIdx_,
+                  hbhe_pfrh_ieta_,
+                  hbhe_pfrh_iphi_,
+                  hbhe_pfrh_time_,
+                  energy,
+                  energyFracInCluster,
+                  fracInCluster,
+                  pfrh_eta,
+                  pfrh_phi,
+                  pfrh_depth,
+                  clusterIndex,
+                  pfrh_ieta,
+                  pfrh_iphi,
+                  time);
+        hebh_pfrh_count++;
+        // additionally fill HB or HE
+        if (isHB) {
+          fill_pfrh(hb_pfrh_energy_,
+                    hb_pfrh_energyFracInCluster_,
+                    hb_pfrh_fracInCluster_,
+                    hb_pfrh_eta_,
+                    hb_pfrh_phi_,
+                    hb_pfrh_depth_,
+                    hb_pfrh_clusterIdx_,
+                    hb_pfrh_ieta_,
+                    hb_pfrh_iphi_,
+                    hb_pfrh_time_,
+                    energy,
+                    energyFracInCluster,
+                    fracInCluster,
+                    pfrh_eta,
+                    pfrh_phi,
+                    pfrh_depth,
+                    clusterIndex,
+                    pfrh_ieta,
+                    pfrh_iphi,
+                    time);
+          hb_pfrh_count++;
+        } else if (isHE) {
+          fill_pfrh(he_pfrh_energy_,
+                    he_pfrh_energyFracInCluster_,
+                    he_pfrh_fracInCluster_,
+                    he_pfrh_eta_,
+                    he_pfrh_phi_,
+                    he_pfrh_depth_,
+                    he_pfrh_clusterIdx_,
+                    he_pfrh_ieta_,
+                    he_pfrh_iphi_,
+                    he_pfrh_time_,
+                    energy,
+                    energyFracInCluster,
+                    fracInCluster,
+                    pfrh_eta,
+                    pfrh_phi,
+                    pfrh_depth,
+                    clusterIndex,
+                    pfrh_ieta,
+                    pfrh_iphi,
+                    time);
+          he_pfrh_count++;
+        }
+      }
+
+      hbhe_pfrh_counts_.push_back(hebh_pfrh_count);   
+      hb_pfrh_counts_.push_back(hb_pfrh_count);
+      he_pfrh_counts_.push_back(he_pfrh_count);
+      
+    clusterIndex++;}
+  }
+
+  // NEW: loop over every accepted PF HBHE RecHit exactly once, outside the HCAL-cluster loop.
+  // This includes PFRecHits that were not assigned to any HCAL PFCluster. The existing
+  // cluster-associated hbhe_pfrh_*/hb_pfrh_*/he_pfrh_* branches above are left unchanged.
+  if (allHcalPFRecHits.isValid()) {
+    for (std::size_t pfrhIndex = 0; pfrhIndex < allHcalPFRecHits->size(); ++pfrhIndex) {
+      const reco::PFRecHit& pfrh = (*allHcalPFRecHits)[pfrhIndex];
+
+      DetId pfrhDetId(pfrh.detId());
+      if (pfrhDetId.det() != DetId::Hcal) continue;
+
+      HcalDetId hcalDetId(pfrh.detId());
+      const auto subdet = hcalDetId.subdet();
+      if (subdet != HcalBarrel && subdet != HcalEndcap) continue;
+
+      float eta = -999.f;
+      float phi = -999.f;
+      const CaloCellGeometry* cell = caloGeom.getGeometry(pfrhDetId);
+      if (cell) {
+        const GlobalPoint& pos = cell->getPosition();
+        eta = pos.eta();
+        phi = pos.phi();
+      } else {
+        eta = hcalEtaFromIeta(hcalDetId.ieta());
+        phi = hcalPhiFromIphi(hcalDetId.iphi());
+      }
+
+      const float energy = pfrh.energy();
+      const float pt = energy / std::cosh(eta);
+
+      all_hbhe_pfrh_pt_.push_back(pt);
+      all_hbhe_pfrh_eta_.push_back(eta);
+      all_hbhe_pfrh_phi_.push_back(phi);
+      all_hbhe_pfrh_ieta_.push_back(hcalDetId.ieta());
+      all_hbhe_pfrh_iphi_.push_back(hcalDetId.iphi());
+      all_hbhe_pfrh_energy_.push_back(energy);
+      all_hbhe_pfrh_depth_.push_back(hcalDetId.depth());
+      all_hbhe_pfrh_time_.push_back(pfrh.time());
+      all_hbhe_pfrh_clusterIdx_.push_back(allHcalPFRecHitClusterIdx[pfrhIndex]);
     }
   }
 
@@ -262,6 +1180,13 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup&)
   iEvent.getByToken(pfBlocksToken_, pfBlocks);
   if (pfBlocks.isValid()) {
     num_pfBlocks_ = pfBlocks->size();
+  }
+  
+  // uMNio (laserType from HCAL uMNio digi; -1000 if not present)
+  edm::Handle<HcalUMNioDigi> cumnio;
+  iEvent.getByToken(uMNioToken_, cumnio);
+  if (cumnio.isValid()) {
+    laserType_ = cumnio->valueUserWord(1);
   }
 
   // uMNio (laserType from HCAL uMNio digi; -1000 if not present)

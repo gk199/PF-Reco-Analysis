@@ -110,6 +110,10 @@ To check the event content, use `edmDumpEventContent` and search for the collect
 edmDumpEventContent pf_only_reReco_MC.root | grep EcalRecHits 
 edmDumpEventContent pf_only_reReco_MC.root | grep particleFlow 
 ```
+## Re-Reco Files:
+Re-reco ROOT files for the charged/neutral pion gun samples and tt̄ can be found at https://cernbox.cern.ch/s/uxYcyt4r0D63APo, under:
+/Public/Rereco/<sample_name>/pf_only_reReco_MC_Sim_new.root
+
 
 An option is also prepared to run over the HCAL phase scan files, to save the uMNio word that encodes the phase delay. To run this:
 ```

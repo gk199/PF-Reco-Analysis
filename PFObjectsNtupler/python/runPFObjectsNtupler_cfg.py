@@ -7,7 +7,8 @@ options.outputFile = 'pfObjectsNtuple.root'
 options.parseArguments()
 
 process = cms.Process("NTUPLE")
-
+#process.load("Configuration.StandardSequences.GeometryRecoDB_cff")
+process.load("Configuration.Geometry.GeometryIdeal_cff")
 process.load("FWCore.MessageService.MessageLogger_cfi")
 process.MessageLogger.cerr.FwkReport.reportEvery = 1000
 process.MessageLogger.suppressWarning = cms.untracked.vstring("pfObjectsNtupler")
