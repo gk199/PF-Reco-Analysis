@@ -1,20 +1,30 @@
-# Auto generated configuration file
-# using: 
-# Revision: 1.19 
-# Source: /local/reps/CMSSW/CMSSW/Configuration/Applications/python/ConfigBuilder.py,v 
-# with command line options: MyPFStudy_ReReco_MC --mc --conditions auto:phase1_2025_realistic --step RAW2DIGI,L1Reco,RECO --geometry DB --era Run3 --filein file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/CMSSW_15_0_6/src/SinglePiPt10_step1_GEN-SIM-RAW.root --fileout file:pf_only_reReco_MC.root --eventcontent RECO --datatier RECO --process ReRECO --customise_commands=process.out = cms.OutputModule('PoolOutputModule', fileName = cms.untracked.string('pf_only_reReco.root'), outputCommands = cms.untracked.vstring('drop *', 'keep *_particleFlowClusterECAL_*_*', 'keep *_particleFlowClusterHCAL_*_*', 'keep *_particleFlowBlock_*_*', 'keep *_particleFlow_*_*', 'keep *_hbhereco*_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEB_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsEE_*', 'keep EcalRecHitsSorted_ecalRecHit_EcalRecHitsES_*')); process.outpath = cms.EndPath(process.out) --no_exec -n 1000
+# DIGI -> RAW2DIGI -> L1Reco -> RECO for DiPionGun GEN-SIM-RAW samples.
+# Era and GlobalTag match the SinglePiPt10 generation (Run3 / phase1_2025_realistic).
+#
+# Usage:
+#   cmsRun MyPFStudy_ReReco_DiPionGun_DIGI_RAW2DIGI_L1Reco_RECO.py \
+#       inputFiles=file:/path/to/DiPionGun_DR0.1_DT0.0_GEN-SIM-RAW.root \
+#       outputFile=pf_only_reReco_DiPionGun_DR0.1_DT0.0.root
+
 import FWCore.ParameterSet.Config as cms
+from FWCore.ParameterSet.VarParsing import VarParsing
+
+options = VarParsing('analysis')
+options.inputFiles = 'file:/afs/cern.ch/work/g/gkopp/2025_ParticleFlow/MC_Generation/CMSSW_15_0_6/src/DiPionGun_DR0.1_DT0.0_GEN-SIM-RAW.root'
+options.outputFile = 'pf_only_reReco_DiPionGun_DR0.1_DT0.0.root'
+options.parseArguments()
+# maxEvents is set directly on process, not via VarParsing, to avoid VarParsing
+# appending _numEventN to the output filename.
 
 from Configuration.Eras.Era_Run3_cff import Run3
 
-process = cms.Process('ReRECO',Run3)
+process = cms.Process('ReRECO', Run3)
 
 # import of standard configurations
 process.load('Configuration.StandardSequences.Services_cff')
 process.load('SimGeneral.HepPDTESSource.pythiapdt_cfi')
 process.load('FWCore.MessageService.MessageLogger_cfi')
 process.load('Configuration.EventContent.EventContent_cff')
-process.load('SimGeneral.MixingModule.mixNoPU_cfi')
 process.load('Configuration.StandardSequences.GeometryRecoDB_cff')
 process.load('Configuration.StandardSequences.MagneticField_cff')
 process.load('Configuration.StandardSequences.RawToDigi_cff')
@@ -24,13 +34,33 @@ process.load('Configuration.StandardSequences.EndOfProcess_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 
 process.maxEvents = cms.untracked.PSet(
-    input = cms.untracked.int32(1000),
-    output = cms.optional.untracked.allowed(cms.int32,cms.PSet)
+    input = cms.untracked.int32(100),
+    output = cms.optional.untracked.allowed(cms.int32, cms.PSet)
 )
 
 # Input source
 process.source = cms.Source("PoolSource",
-    fileNames = cms.untracked.vstring('file:/afs/cern.ch/user/c/chtong/PF/CMSSW_15_0_6/src/PF-Reco-Analysis/SinglePiPt100_1000_step1_GEN-SIM-RAW.root'),
+    dropDescendantsOfDroppedBranches = cms.untracked.bool(False),
+    fileNames = cms.untracked.vstring(options.inputFiles),
+    inputCommands = cms.untracked.vstring(
+        'keep *',
+        'drop *_genParticles_*_*',
+        'drop *_genParticlesForJets_*_*',
+        'drop *_kt4GenJets_*_*',
+        'drop *_kt6GenJets_*_*',
+        'drop *_iterativeCone5GenJets_*_*',
+        'drop *_ak4GenJets_*_*',
+        'drop *_ak7GenJets_*_*',
+        'drop *_ak8GenJets_*_*',
+        'drop *_ak4GenJetsNoNu_*_*',
+        'drop *_ak8GenJetsNoNu_*_*',
+        'drop *_genCandidatesForMET_*_*',
+        'drop *_genParticlesForMETAllVisible_*_*',
+        'drop *_genMetCalo_*_*',
+        'drop *_genMetCaloAndNonPrompt_*_*',
+        'drop *_genMetTrue_*_*',
+        'drop *_genMetIC5GenJs_*_*'
+    ),
     secondaryFileNames = cms.untracked.vstring()
 )
 
@@ -66,17 +96,17 @@ process.options = cms.untracked.PSet(
     wantSummary = cms.untracked.bool(False)
 )
 
-# Production Info
-process.configurationMetadata = cms.untracked.PSet(
-    annotation = cms.untracked.string('MyPFStudy_ReReco_MC nevts:1000'),
-    name = cms.untracked.string('Applications'),
-    version = cms.untracked.string('$Revision: 1.19 $')
-)
+# GlobalTag: use phase1_2025_realistic for RECO even though GEN-SIM-RAW was produced with
+# phase1_2024_realistic. The 2025 tag has tighter HCAL noise thresholds (tuned from 2024
+# running) that suppress low-energy noise rechits which would otherwise form spurious clusters
+# in 2024-simulated MC. Using 2024 RECO conditions gives ~12 noise clusters per event instead
+# of the expected 2 signal clusters.
+from Configuration.AlCa.GlobalTag import GlobalTag
+process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:phase1_2025_realistic', '')
 
-# Output definition
-
-process.RECOoutput = cms.OutputModule("PoolOutputModule",
-    fileName = cms.untracked.string('file:pf_only_reReco_MC.root'),
+# Output: slim RECO keeping only PF and calorimeter objects
+process.RECOoutput = cms.OutputModule('PoolOutputModule',
+    fileName = cms.untracked.string('file:' + options.outputFile),
     outputCommands = cms.untracked.vstring(
         'drop *',
         'keep *_particleFlowClusterECAL_*_*',
@@ -93,34 +123,26 @@ process.RECOoutput = cms.OutputModule("PoolOutputModule",
     )
 )
 
-# Additional output definition
-
-# Other statements
-from Configuration.AlCa.GlobalTag import GlobalTag
-process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:phase1_2025_realistic', '')
-
 # Path and EndPath definitions
-process.raw2digi_step = cms.Path(process.RawToDigi)
-process.L1Reco_step = cms.Path(process.L1Reco)
+process.raw2digi_step      = cms.Path(process.RawToDigi)
+process.L1Reco_step        = cms.Path(process.L1Reco)
 process.reconstruction_step = cms.Path(process.reconstruction)
-process.endjob_step = cms.EndPath(process.endOfProcess)
-process.RECOoutput_step = cms.EndPath(process.RECOoutput)
+process.endjob_step        = cms.EndPath(process.endOfProcess)
+process.RECOoutput_step    = cms.EndPath(process.RECOoutput)
 
-# Schedule definition
-process.schedule = cms.Schedule(process.raw2digi_step,process.L1Reco_step,process.reconstruction_step,process.endjob_step,process.RECOoutput_step)
+process.schedule = cms.Schedule(
+    process.raw2digi_step,
+    process.L1Reco_step,
+    process.reconstruction_step,
+    process.endjob_step,
+    process.RECOoutput_step,
+)
+
 from PhysicsTools.PatAlgos.tools.helpers import associatePatAlgosToolsTask
 associatePatAlgosToolsTask(process)
 
-
-
-# Customisation from command line
-
-
-#Have logErrorHarvester wait for the same EDProducers to finish as those providing data for the OutputModule
 from FWCore.Modules.logErrorHarvester_cff import customiseLogErrorHarvesterUsingOutputCommands
 process = customiseLogErrorHarvesterUsingOutputCommands(process)
 
-# Add early deletion of temporary data products to reduce peak memory need
 from Configuration.StandardSequences.earlyDeleteSettings_cff import customiseEarlyDelete
 process = customiseEarlyDelete(process)
-# End adding early deletion

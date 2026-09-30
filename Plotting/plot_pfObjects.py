@@ -1,7 +1,13 @@
+import argparse
 import ROOT
 
+parser = argparse.ArgumentParser(description="Plot PF objects from ntupler output")
+parser.add_argument("--input",  default="pfObjectsNtuple.root",  help="Input ROOT file from ntupler")
+parser.add_argument("--output", default="pfObjectsHistos.root",  help="Output ROOT file for histograms")
+args = parser.parse_args()
+
 # Load the ROOT file and TTree
-file = ROOT.TFile.Open("pfObjectsNtuple.root")
+file = ROOT.TFile.Open(args.input)
 tree = file.Get("pfObjectsNtupler/pfTree")
 
 if not tree:
@@ -12,7 +18,7 @@ if not tree:
 print(f"Entries in tree: {tree.GetEntries()}")
 
 # Create output file for histograms
-out = ROOT.TFile("pfObjectsHistos.root", "RECREATE")
+out = ROOT.TFile(args.output, "RECREATE")
 
 # Define histograms
 h_pf_pt   = ROOT.TH1F("h_pf_pt",   "PF candidate p_{T};p_{T} [GeV];Entries", 100, 0, 200)
@@ -197,16 +203,9 @@ for event in tree:
         h_hcal_E_all.Fill(e)
         h_hcal_time_all.Fill(t)
 
-        # Create depth histos dynamically if not existing
-        if d not in depth_hists_E:
-            depth_hists_E[d] = ROOT.TH1F(f"h_hcal_E_depth{d}", f"HCAL energy depth {d};E [GeV];Entries", 100, 0, 200)
-            depth_hists_t[d] = ROOT.TH1F(f"h_hcal_time_depth{d}", f"HCAL time depth {d};t [ns];Entries", 100, -50, 50)
-        
-        depth_hists_E[d].Fill(e)
-        depth_hists_t[d].Fill(t)
-
 # Save histograms
+out.cd()
 out.Write()
 out.Close()
 
-print("Histograms saved to pfObjectsHistos.root")
+print(f"Histograms saved to {args.output}")

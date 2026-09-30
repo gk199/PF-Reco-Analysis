@@ -18,6 +18,7 @@ class HCALEventDisplay:
         self.hcal_eta    = self.data['hcal_eta']
         self.hcal_phi    = self.data['hcal_phi']
         self.hcal_energy = self.data['hcal_energy']
+        self.hcal_time   = self.data['hcal_time']
         self.hcal_depth  = self.data['hcal_depth']
 
         self.rh_eta      = self.data['rh_eta']
@@ -125,7 +126,8 @@ class HCALEventDisplay:
                 f"{i:2d}: "
                 f"E={float(self.hcal_energy[self.event][i]):5.2f}  "
                 f"$\eta$={float(self.hcal_eta[self.event][i]):+5.2f}  "
-                f"$\phi$={float(self.hcal_phi[self.event][i]):+5.2f}"
+                f"$\phi$={float(self.hcal_phi[self.event][i]):+5.2f}  "
+                f"t={float(self.hcal_time[self.event][i]):+6.2f} ns"
             )
 
             # make current cluster bolded
@@ -214,26 +216,49 @@ class HCALEventDisplay:
         energy = energy[mask_geo]
         time   = time[mask_geo]
 
+        # Mask rechits with invalid sentinel time (-999)
+        valid_time = time > -100
+
         # Determine color scale
         vminE, vmaxE = (np.min(energy), np.max(energy)) if len(energy) > 0 else (0,1)
-        vminT, vmaxT = (np.min(time), np.max(time)) if len(time) > 0 else (0,1)
+        valid_t_vals = time[valid_time]
+        if len(valid_t_vals) > 0:
+            vminT, vmaxT = np.min(valid_t_vals), np.max(valid_t_vals)
+            if vmaxT - vminT < 1.0:  # degenerate range → center on cluster time ±0.5 ns
+                mid = (vminT + vmaxT) / 2
+                vminT, vmaxT = mid - 0.5, mid + 0.5
+        else:
+            vminT, vmaxT = -1.0, 1.0
 
         # Draw scatter and cluster outlines
+        scE_sample = None
+        scT_sample = None
         for d in [1,2,3,4]:
             axE = self.ax[d-1]
             axT = self.ax[d-1+4]
 
             hit = (depth == d)
+            hit_invalid = hit & ~valid_time
+            hit_t = hit & valid_time
 
             # Draw hits
             if np.sum(hit) > 0:
-                axE.scatter(eta[hit], phi[hit], s=80, c=energy[hit],
-                            cmap="viridis", vmin=vminE, vmax=vmaxE)
-                axT.scatter(eta[hit], phi[hit], s=80, c=time[hit],
-                            cmap="plasma", vmin=vminT, vmax=vmaxT)
+                sc = axE.scatter(eta[hit], phi[hit], s=80, c=energy[hit],
+                                 cmap="viridis", vmin=vminE, vmax=vmaxE)
+                scE_sample = sc
             else:
                 axE.text(0.5, 0.5, "No hits", ha='center', va='center')
+
+            if np.sum(hit) == 0:
                 axT.text(0.5, 0.5, "No hits", ha='center', va='center')
+            else:
+                if np.sum(hit_invalid) > 0:
+                    axT.scatter(eta[hit_invalid], phi[hit_invalid], s=80,
+                                c="grey", marker='x', zorder=2)
+                if np.sum(hit_t) > 0:
+                    sc = axT.scatter(eta[hit_t], phi[hit_t], s=80, c=time[hit_t],
+                                     cmap="plasma", vmin=vminT, vmax=vmaxT, zorder=3)
+                    scT_sample = sc
 
             # Cluster outline
             if c_depth == d or (c_depth < d and c_depth > d-1) or (c_depth > d and c_depth < d+1): # draw cluster at the closest depth
@@ -250,21 +275,21 @@ class HCALEventDisplay:
             axx.set_ylim(c_phi - 0.27, c_phi + 0.27)
 
         # Add/update colorbars
-        scE_sample = axE.collections[0] if np.sum(hit)>0 else axE.scatter([], [], cmap="viridis")
-        scT_sample = axT.collections[0] if np.sum(hit)>0 else axT.scatter([], [], cmap="plasma")
+        if scE_sample is None:
+            scE_sample = self.ax[0].scatter([], [], c=[], cmap="viridis", vmin=vminE, vmax=vmaxE)
+        if scT_sample is None:
+            scT_sample = self.ax[4].scatter([], [], c=[], cmap="plasma", vmin=vminT, vmax=vmaxT)
 
         if self.cbar_energy is None:
             self.cbar_energy = self.fig.colorbar(scE_sample, ax=self.ax[0:4], location="right", fraction=0.02)
             self.cbar_energy.set_label("Energy [GeV]")
         else:
-            self.cbar_energy.mappable.set_array(energy)
             self.cbar_energy.mappable.set_clim(vminE, vmaxE)
 
         if self.cbar_time is None:
             self.cbar_time = self.fig.colorbar(scT_sample, ax=self.ax[4:8], location="right", fraction=0.02)
-            self.cbar_time.set_label("Time [TDC codes]")
-        else:
-            self.cbar_time.mappable.set_array(time)
+            self.cbar_time.set_label("Time [ns]")
+        elif len(valid_t_vals) > 0:
             self.cbar_time.mappable.set_clim(vminT, vmaxT)
 
         self.fig.suptitle(f"Event {self.event} — Cluster {idx}, cluster depth {c_depth}", fontsize=16)
@@ -279,7 +304,7 @@ def main():
     parser = argparse.ArgumentParser(description="HCAL Event Display")
     
     # Add a required positional argument
-    parser.add_argument("filename", type=str, nargs="?", help="Path to the ROOT file from the ntupler",default="SinglePiPt100_1000_n1000_pfObjectsNtuple_tdc.root")
+    parser.add_argument("filename", type=str, nargs="?", help="Path to the ROOT file from the ntupler",default="pfObjectsNtuple_tdc.root")
     args = parser.parse_args()
 
     ###############################################################################
@@ -289,29 +314,32 @@ def main():
     # file = uproot.open("../../Downloads/pfObjectsNtuple.root") # path to your root file from the ntupler
     # directory = file["pfObjectsNtupler"] 
     file = uproot.open(args.filename) # path to your root file from the ntupler
-    directory = file["pfObjectsNtuplertdc"] 
+    # directory = file["pfObjectsNtuplertdc"] 
+    directory = file["pfObjectsNtupler"] 
     tree = directory["pfTree"]
 
     # HCAL clusters
     hcal_eta    = tree["hcal_eta"].array(library="ak")
     hcal_phi    = tree["hcal_phi"].array(library="ak")
     hcal_energy = tree["hcal_energy"].array(library="ak")
-    # hcal_time   = tree["hcal_time"].array(library="ak")
+    hcal_time   = tree["hcal_time"].array(library="ak")
     hcal_depth  = tree["hcal_depth"].array(library="ak")
 
     # HBHE rechits
     rh_eta    = tree["hbhe_rechit_eta"].array(library="ak")
     rh_phi    = tree["hbhe_rechit_phi"].array(library="ak")
     rh_energy = tree["hbhe_rechit_energy"].array(library="ak")
-    # rh_time   = tree["hbhe_rechit_time"].array(library="ak")
-    rh_time   = tree["hbhe_rechit_tdc"].array(library="ak")
+    rh_time   = tree["hbhe_rechit_time"].array(library="ak")
+    # rh_time   = tree["hbhe_rechit_tdc"].array(library="ak")
     rh_depth  = tree["hbhe_rechit_depth"].array(library="ak")
-    rh_clusterIndex = tree["hbheRechit_clusterIdx"].array(library="ak")
+    # rh_clusterIndex = tree["hbheRechit_clusterIdx"].array(library="ak")
+    rh_clusterIndex = tree["hbhe_rechit_clusterIndex"].array(library="ak")
 
     data = dict(
         hcal_eta=hcal_eta,
         hcal_phi=hcal_phi,
         hcal_energy=hcal_energy,
+        hcal_time=hcal_time,
         hcal_depth=hcal_depth,
         rh_eta=rh_eta,
         rh_phi=rh_phi,
@@ -323,7 +351,7 @@ def main():
     # Start Event Display
     ###############################################################################
     # Example: start at event 5
-    viewer = HCALEventDisplay(data, start_event=5)
+    viewer = HCALEventDisplay(data, start_event=20)
 
 if __name__ == "__main__":
     main()

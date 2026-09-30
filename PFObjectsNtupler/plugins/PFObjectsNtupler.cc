@@ -102,7 +102,7 @@ private:
   std::vector<float> ee_rechit_time_; std::vector<int> ee_rechit_clusterIdx_; 
   std::vector<int> ee_rechit_counts_;
 
-  // HCAL clusters
+  // HCAL clusters (post-depth-stacking: particleFlowClusterHCAL)
   std::vector<float> hcal_energy_, hcal_eta_, hcal_phi_, hcal_time_, hcal_depth_;
   std::vector<float> hcal_seed_eta_;
   std::vector<float> hcal_seed_phi_;
@@ -791,7 +791,7 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
 
   }
 
-  // HCAL Clusters
+  // HCAL Clusters (post-depth-stacking: particleFlowClusterHCAL)
   edm::Handle<std::vector<reco::PFCluster>> hcalClusters;
   iEvent.getByToken(hcalClustersToken_, hcalClusters);
 
@@ -851,7 +851,7 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
 
       
 
-      // std::cout << "Cluster eta: " << cl.eta() << " phi: " << cl.phi() << std::endl;
+      int clIdx = (int)hcal_energy_.size() - 1;
 
       // Loop over HBHE rechits (linked geometrically) associated to this HCAL cluster. Stored as hbhereco, these are the raw ones instead of PF (since that was a transitory collection)
       if (hbheRechits.isValid()) {
@@ -1182,6 +1182,13 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
     num_pfBlocks_ = pfBlocks->size();
   }
   
+  // uMNio (laserType from HCAL uMNio digi; -1000 if not present)
+  edm::Handle<HcalUMNioDigi> cumnio;
+  iEvent.getByToken(uMNioToken_, cumnio);
+  if (cumnio.isValid()) {
+    laserType_ = cumnio->valueUserWord(1);
+  }
+
   // uMNio (laserType from HCAL uMNio digi; -1000 if not present)
   edm::Handle<HcalUMNioDigi> cumnio;
   iEvent.getByToken(uMNioToken_, cumnio);
