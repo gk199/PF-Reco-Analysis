@@ -1189,12 +1189,6 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
     laserType_ = cumnio->valueUserWord(1);
   }
 
-  // uMNio (laserType from HCAL uMNio digi; -1000 if not present)
-  edm::Handle<HcalUMNioDigi> cumnio;
-  iEvent.getByToken(uMNioToken_, cumnio);
-  if (cumnio.isValid()) {
-    laserType_ = cumnio->valueUserWord(1);
-  }
 
   tree_->Fill();
 }
