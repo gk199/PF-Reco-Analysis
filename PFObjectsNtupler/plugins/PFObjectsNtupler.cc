@@ -49,6 +49,7 @@
 #include <vector>
 #include <cmath>
 #include <utility>
+#include <unordered_map>
 
 
 class PFObjectsNtupler : public edm::one::EDAnalyzer<edm::one::SharedResources> {
@@ -174,6 +175,25 @@ private:
   std::vector<int> gen_pdgId_, gen_status_;
   std::vector<int> gen_charge_;
   std::vector<float> gen_vx_, gen_vy_, gen_vz_;
+
+  // Additional generator information; existing gen_* ordering is unchanged.
+  // Positions/lengths: cm; momenta/mass: GeV; estimated times: ns.
+  // reco::GenParticle has NO per-particle production/decay timestamp.
+  // Time estimates describe only this record's straight-line flight segment:
+  // dt = L*E/(|p|*c), proper dt = L*m/(|p|*c).
+  // They are not absolute event times or accumulated times along an ancestry chain.
+  // Missing/invalid floating-point values: -999; unresolved relation index: -1.
+  // All mothers/daughters are flattened, with Ngen+1 offsets (also for empty events).
+  // For particle i, mother entries are [motherOffset[i], motherOffset[i+1]);
+  // daughter entries work identically. Each index addresses the existing gen_* arrays.
+  // decayV* is inferred only when ALL immediate daughters have available, finite
+  // vertices agreeing within 1e-6 cm. It is a generator end vertex, not necessarily
+  // a physical decay: shower/history copies also have daughters. No copies are skipped.
+  // statusFlags (isLastCopy) helps identify such records.
+  // statusFlags stores all 15 CMSSW GenStatusFlags bits (see GenStatusFlags.h).
+  std::vector<float> gen_decayVx_, gen_decayVy_, gen_decayVz_, gen_decayR_, gen_decayLengthXY_, gen_decayLength3D_, gen_flightTimeEstimate_, gen_properTimeEstimate_;
+  std::vector<int> gen_statusFlags_, gen_motherOffset_, gen_daughterOffset_, gen_motherIdx_, gen_daughterIdx_;
+
 };
 
 PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
@@ -187,10 +207,17 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
   // NEW: read the complete accepted PF HBHE RecHit collection. The empty instance is the
   // main particleFlowRecHitHBHE output; the separate "Cleaned" instance contains rejected hits.
   pfHcalRecHitsToken_ = consumes<reco::PFRecHitCollection>(edm::InputTag("particleFlowRecHitHBHE"));
-  hbheRechitsToken_ = consumes<edm::SortedCollection<HBHERecHit>>(edm::InputTag("hbhereco", "", "ReRECO")); // make sure this matches the input file! 
-  ebRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalRecHit", "EcalRecHitsEB", "ReRECO")); 
-  eeRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalRecHit", "EcalRecHitsEE", "ReRECO")); 
-  esRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalPreshowerRecHit", "EcalRecHitsES", "ReRECO")); 
+  
+  // hbheRechitsToken_ = consumes<edm::SortedCollection<HBHERecHit>>(edm::InputTag("hbhereco", "", "ReRECO")); // make sure this matches the input file! 
+  // ebRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalRecHit", "EcalRecHitsEB", "ReRECO")); 
+  // eeRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalRecHit", "EcalRecHitsEE", "ReRECO")); 
+  // esRechitsToken_ = consumes<EcalRecHitCollection>(edm::InputTag("ecalPreshowerRecHit", "EcalRecHitsES", "ReRECO")); 
+
+  hbheRechitsToken_ = consumes<edm::SortedCollection<HBHERecHit>>(iConfig.getParameter<edm::InputTag>("hbheRechits"));
+  ebRechitsToken_ = consumes<EcalRecHitCollection>(iConfig.getParameter<edm::InputTag>("ecalRechitsEB"));
+  eeRechitsToken_ = consumes<EcalRecHitCollection>(iConfig.getParameter<edm::InputTag>("ecalRechitsEE"));
+  esRechitsToken_ = consumes<EcalRecHitCollection>(iConfig.getParameter<edm::InputTag>("ecalRechitsES"));
+
   // hbheRechitsToken_ = consumes<std::vector<reco::PFRecHit>>(edm::InputTag("particleFlowRecHitHBHE", "Cleaned", "ReRECOtoAOD"));
   // hbheRechitsToken_ = consumes<std::vector<reco::PFRecHit>>(edm::InputTag("particleFlowRecHitHBHE", "", "ReRECO"));
   pfBlocksToken_ = consumes<std::vector<reco::PFBlock>>(iConfig.getParameter<edm::InputTag>("pfBlocks"));
@@ -341,6 +368,21 @@ PFObjectsNtupler::PFObjectsNtupler(const edm::ParameterSet& iConfig)
   tree_->Branch("gen_vy", &gen_vy_);
   tree_->Branch("gen_vz", &gen_vz_);
 
+  tree_->Branch("gen_decayVx", &gen_decayVx_);
+  tree_->Branch("gen_decayVy", &gen_decayVy_);
+  tree_->Branch("gen_decayVz", &gen_decayVz_);
+  tree_->Branch("gen_decayR", &gen_decayR_);
+  tree_->Branch("gen_decayLengthXY", &gen_decayLengthXY_);
+  tree_->Branch("gen_decayLength3D", &gen_decayLength3D_);
+  tree_->Branch("gen_flightTimeEstimate", &gen_flightTimeEstimate_);
+  tree_->Branch("gen_properTimeEstimate", &gen_properTimeEstimate_);
+  tree_->Branch("gen_statusFlags", &gen_statusFlags_);
+  tree_->Branch("gen_motherOffset", &gen_motherOffset_);
+  tree_->Branch("gen_daughterOffset", &gen_daughterOffset_);
+  tree_->Branch("gen_motherIdx", &gen_motherIdx_);
+  tree_->Branch("gen_daughterIdx", &gen_daughterIdx_);
+
+
   // PF block info
   tree_->Branch("num_pfBlocks", &num_pfBlocks_);
 
@@ -472,6 +514,21 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
   gen_vx_.clear();
   gen_vy_.clear();
   gen_vz_.clear();
+  gen_decayVx_.clear();
+  gen_decayVy_.clear();
+  gen_decayVz_.clear();
+  gen_decayR_.clear();
+  gen_decayLengthXY_.clear();
+  gen_decayLength3D_.clear();
+  gen_flightTimeEstimate_.clear();
+  gen_properTimeEstimate_.clear();
+  gen_statusFlags_.clear();
+  gen_motherOffset_.clear();
+  gen_daughterOffset_.clear();
+  gen_motherIdx_.clear();
+  gen_daughterIdx_.clear();
+  gen_motherOffset_.push_back(0);
+  gen_daughterOffset_.push_back(0);
 
   auto fill_pfrh = [&](auto& pfrh_energy,
                       auto& pfrh_energyFracInCluster,
@@ -532,6 +589,17 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
   iEvent.getByToken(genParticlesToken_, genParticles);
 
   if (genParticles.isValid()) {
+    // Pointer lookup avoids assuming that references always target this collection.
+    std::unordered_map<const reco::Candidate*, int> genIndex;
+    for (size_t i = 0; i < genParticles->size(); ++i)
+      genIndex.emplace(&(*genParticles)[i], static_cast<int>(i));
+    const auto indexOf = [&genIndex](const reco::Candidate* particle) {
+      const auto found = genIndex.find(particle);
+      return found == genIndex.end() ? -1 : found->second;
+    };
+    constexpr double missing = -999.;
+    constexpr double cCmPerNs = 29.9792458;
+    constexpr double vertexToleranceCm = 1.e-6;
     for (const auto& gen : *genParticles) {
       gen_pt_.push_back(gen.pt());
       gen_eta_.push_back(gen.eta());
@@ -543,6 +611,68 @@ void PFObjectsNtupler::analyze(const edm::Event& iEvent, const edm::EventSetup& 
       gen_vx_.push_back(gen.vx());
       gen_vy_.push_back(gen.vy());
       gen_vz_.push_back(gen.vz());
+
+      gen_statusFlags_.push_back(static_cast<int>(gen.statusFlags().flags_.to_ulong()));
+      const double momentum = gen.p();
+      const double energy = gen.energy();
+      const double mass = gen.mass();
+      const bool validMomentum = std::isfinite(momentum) && std::isfinite(energy) &&
+                                 momentum > 0. && energy > 0.;
+
+      for (size_t j = 0; j < gen.numberOfMothers(); ++j) {
+        const auto ref = gen.motherRef(j);
+        const reco::Candidate* mother = ref.isNonnull() && ref.isAvailable() ? ref.get() : nullptr;
+        gen_motherIdx_.push_back(indexOf(mother));
+      }
+      gen_motherOffset_.push_back(static_cast<int>(gen_motherIdx_.size()));
+
+      bool commonVertex = gen.numberOfDaughters() > 0;
+      bool haveVertex = false;
+      double decayX = missing, decayY = missing, decayZ = missing;
+      for (size_t j = 0; j < gen.numberOfDaughters(); ++j) {
+        const auto ref = gen.daughterRef(j);
+        const reco::Candidate* daughter = ref.isNonnull() && ref.isAvailable() ? ref.get() : nullptr;
+        gen_daughterIdx_.push_back(indexOf(daughter));
+        if (!daughter || !std::isfinite(daughter->vx()) ||
+            !std::isfinite(daughter->vy()) || !std::isfinite(daughter->vz())) {
+          commonVertex = false;
+          continue;
+        }
+        if (!haveVertex) {
+          decayX = daughter->vx(); decayY = daughter->vy(); decayZ = daughter->vz();
+          haveVertex = true;
+        } else if (std::hypot(std::hypot(daughter->vx() - decayX, daughter->vy() - decayY),
+                              daughter->vz() - decayZ) > vertexToleranceCm) {
+          commonVertex = false;
+        }
+      }
+      gen_daughterOffset_.push_back(static_cast<int>(gen_daughterIdx_.size()));
+      commonVertex = commonVertex && haveVertex;
+      gen_decayVx_.push_back(commonVertex ? decayX : missing);
+      gen_decayVy_.push_back(commonVertex ? decayY : missing);
+      gen_decayVz_.push_back(commonVertex ? decayZ : missing);
+      gen_decayR_.push_back(commonVertex ? std::hypot(decayX, decayY) : missing);
+
+      double lengthXY = missing, length3D = missing;
+      double flightTime = missing, properTime = missing;
+      if (commonVertex && std::isfinite(gen.vx()) && std::isfinite(gen.vy()) && std::isfinite(gen.vz())) {
+        const double dx = decayX - gen.vx(), dy = decayY - gen.vy(), dz = decayZ - gen.vz();
+        lengthXY = std::hypot(dx, dy);
+        length3D = std::hypot(lengthXY, dz);
+        // Straight-line, constant-momentum estimates. Not valid for arbitrary shower
+        // histories or curved trajectories.
+        // A particle at rest has no inferable lifetime from spatial displacement.
+        if (validMomentum) {
+          flightTime = length3D * energy / (momentum * cCmPerNs);
+          if (std::isfinite(mass) && mass > 0.)
+            properTime = length3D * mass / (momentum * cCmPerNs);
+        }
+      }
+      gen_decayLengthXY_.push_back(lengthXY);
+      gen_decayLength3D_.push_back(length3D);
+      gen_flightTimeEstimate_.push_back(flightTime);
+      gen_properTimeEstimate_.push_back(properTime);
+
     }
   }
 
