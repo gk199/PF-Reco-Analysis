@@ -52,9 +52,9 @@ def parse_float_list(value, default=None):
 def parse_args():
     p = argparse.ArgumentParser(description="Make PF-cluster DR/DT comparison plots.")
     p.add_argument("--input-dir", "--inputdir", dest="input_dir",
-                   default="/eos/user/c/chtong/Public/Rereco/Dipion_eta0.4_4ns/")
+                   default="/eos/user/c/chtong/Public/Rereco/Dipion_eta0.8_4ns/")
     p.add_argument("--output-dir", "--outputdir", dest="output_dir",
-                   default="/eos/user/c/chtong/Public/Rereco/Dipion_eta0.4_4ns/")
+                   default="/eos/user/c/chtong/Public/Rereco/Dipion_eta0.8_4ns/")
     p.add_argument("--prefix", default="pfObjectsNtuple_")
     p.add_argument("--tree-name", default="pfObjectsNtupler/pfTree")
     p.add_argument("--pf-names", nargs="+", default=DEFAULT_PF_NAMES)

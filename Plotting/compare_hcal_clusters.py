@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Compare HCAL cluster properties across four PF algorithm variants:
+Compare HCAL cluster properties across three PF algorithm variants:
   - standardPF
   - cellTimingPF
   - seedTimingPF
-  - depth1SeedTimingPF
 
 Source collection: particleFlowClusterHCAL (post-depth-stacking)
 
@@ -12,10 +11,24 @@ Plots:
   1. Number of HCAL clusters per event
   2. Total HCAL cluster energy per event
   3. Number of PF rechits per HCAL cluster (from hcal_nRecHits branch)
+
+Expected input file naming:
+  pfObjectsNtuple_standardPF${suffix}.root
+  pfObjectsNtuple_cellTimingPF${suffix}.root
+  pfObjectsNtuple_seedTimingPF${suffix}.root
+
+For your current dipion scan, call this with:
+  --suffix "_${SAMPLE}"
+
+not:
+  --suffix "_${TAG}"
+
+because your ntuples are named with the full SAMPLE string.
 """
 
 import argparse
 import ROOT
+import os
 
 ROOT.gROOT.SetBatch(True)
 ROOT.gStyle.SetOptStat(0)
@@ -23,19 +36,23 @@ ROOT.gStyle.SetOptStat(0)
 parser = argparse.ArgumentParser(description="Compare HCAL clusters across PF approaches")
 parser.add_argument("--inputdir", default=".", help="Directory containing input ROOT files")
 parser.add_argument("--prefix",   default="pfObjectsNtuple_", help="Filename prefix before the algorithm label")
-parser.add_argument("--suffix",   default="",                  help="Filename suffix after the algorithm label (before .root)")
+parser.add_argument(
+    "--suffix",
+    default="",
+    help='Filename suffix after the algorithm label before .root, e.g. "_${SAMPLE}"',
+)
 parser.add_argument("--output",   default="hcal_cluster_comparison.root", help="Output ROOT file")
 parser.add_argument("--pdf",      default="hcal_cluster_comparison.pdf",  help="Output PDF with all plots")
 args = parser.parse_args()
 
-LABELS = ["standardPF", "cellTimingPF", "seedTimingPF", "depth1SeedTimingPF"]
-COLORS = [ROOT.kBlack, ROOT.kRed, ROOT.kBlue, ROOT.kGreen + 2]
-STYLES = [1, 2, 7, 9]  # solid, dashed, dot-dashed, dotted
+LABELS = ["standardPF", "cellTimingPF", "seedTimingPF"]
+COLORS = [ROOT.kBlack, ROOT.kRed, ROOT.kBlue]
+STYLES = [1, 2, 7]  # solid, dashed, dot-dashed
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def open_tree(label):
-    fname = f"{args.inputdir}/{args.prefix}{label}{args.suffix}.root"
+    fname = os.path.join(args.inputdir, f"{args.prefix}{label}{args.suffix}.root")
     f = ROOT.TFile.Open(fname)
     if not f or f.IsZombie():
         raise RuntimeError(f"Cannot open {fname}")
@@ -72,9 +89,7 @@ def draw_cms_label():
 
     sim = ROOT.TLatex()
     sim.SetNDC()
-    # sim.SetTextFont(42) 
     sim.SetTextSize(0.035)
-    # sim.DrawLatex(0.19, 0.935, "#it{Simulation}")
     sim.DrawLatex(0.19, 0.935, "#bf{Simulation}")
 
     coll = ROOT.TLatex()
@@ -86,7 +101,7 @@ def draw_cms_label():
 
 
 def draw_overlay(canvas, hists, labels, xtitle, logy=False):
-    """Normalise to unit area and overlay histograms. Returns clones (keep-alive)."""
+    """Normalise to unit area and overlay histograms. Returns clones."""
     canvas.Clear()
     canvas.SetTopMargin(0.08)
     canvas.SetLogy(1 if logy else 0)
@@ -114,36 +129,45 @@ def draw_overlay(canvas, hists, labels, xtitle, logy=False):
 
 # ── book histograms ───────────────────────────────────────────────────────────
 
-# particleFlowClusterHCAL (post-depth-stacking)
 h_ncl   = {}   # N clusters per event
 h_etot  = {}   # total cluster energy per event
-h_nhits = {}   # hits per cluster (uses hbhe_rechit_clusterIndex)
+h_nhits = {}   # hits per cluster
 
-# accumulators for energy conservation cross-check
-sum_cluster_energy  = {}   # sum of hcal_energy per event, accumulated over events
-sum_rechit_energy   = {}   # sum of hbhe_rechit_energy per event, accumulated over events
-n_events            = {}
+sum_cluster_energy = {}
+sum_rechit_energy  = {}
+n_events           = {}
 
 for label in LABELS:
-    h_ncl[label]   = ROOT.TH1F(f"h_ncl_{label}",
+    h_ncl[label] = ROOT.TH1F(
+        f"h_ncl_{label}",
         f"{label} — HCAL clusters/event;N_{{clusters}};Entries",
-        30, 0, 30)
-    h_etot[label]  = ROOT.TH1F(f"h_etot_{label}",
+        8, 0, 8,
+    )
+
+    h_etot[label] = ROOT.TH1F(
+        f"h_etot_{label}",
         f"{label} — HCAL total cluster energy/event;#SigmaE [GeV];Entries",
-        50, 0, 150)
-    h_nhits[label] = ROOT.TH1F(f"h_nhits_{label}",
+        30, 0, 60,
+    )
+
+    h_nhits[label] = ROOT.TH1F(
+        f"h_nhits_{label}",
         f"{label} — PF rechits per HCAL cluster;N_{{PF rechits}};Entries",
-        50, 0, 50)
+        10, 0, 20,
+    )
+
 
 # ── fill histograms ───────────────────────────────────────────────────────────
 
 files = {}
+
 for label in LABELS:
     try:
         f, tree = open_tree(label)
     except RuntimeError as e:
         print(f"WARNING: {e} — skipping {label}")
         continue
+
     files[label] = f
 
     print(f"Processing {label}: {tree.GetEntries()} events")
@@ -157,7 +181,8 @@ for label in LABELS:
         h_ncl[label].Fill(n_cl)
 
         ecl = sum(event.hcal_energy)
-        erh = sum(event.hbhe_rechit_energy)
+        erh = sum(event.hbhe_pfrh_energy)
+
         h_etot[label].Fill(ecl)
 
         sum_cluster_energy[label] += ecl
@@ -167,24 +192,31 @@ for label in LABELS:
         for n in event.hcal_nRecHits:
             h_nhits[label].Fill(n)
 
+
 # ── energy conservation cross-check ──────────────────────────────────────────
 
-# Column meanings:
-#   Mean cluster ΣE  — mean of sum(hcal_energy) per event; should be equal across algorithms
-#   Mean raw rechit ΣE — mean of sum(hbhe_rechit_energy) per event; should be equal across
-#                        algorithms (same hbhereco input) and is a sanity check that the same
-#                        events/rechits were used; the offset vs cluster energy is calibration
 print()
-print(f"{'Algorithm':<22} {'Events':>7}  {'Mean cluster ΣE [GeV]':>22}  {'Mean raw rechit ΣE [GeV]':>24}  {'Offset (calib) [GeV]':>20}")
+print(
+    f"{'Algorithm':<22} "
+    f"{'Events':>7}  "
+    f"{'Mean cluster ΣE [GeV]':>22}  "
+    f"{'Mean raw rechit ΣE [GeV]':>24}  "
+    f"{'Offset (calib) [GeV]':>20}"
+)
 print("-" * 103)
+
 for label in LABELS:
     if label not in n_events or n_events[label] == 0:
         continue
-    n  = n_events[label]
+
+    n = n_events[label]
     ec = sum_cluster_energy[label] / n
-    er = sum_rechit_energy[label]  / n
+    er = sum_rechit_energy[label] / n
+
     print(f"{label:<22} {n:>7}  {ec:>22.3f}  {er:>24.3f}  {ec - er:>20.3f}")
+
 print()
+
 
 # ── apply styles ──────────────────────────────────────────────────────────────
 
@@ -192,46 +224,60 @@ for i, label in enumerate(LABELS):
     for d in [h_ncl, h_etot, h_nhits]:
         style_hist(d[label], COLORS[i], STYLES[i])
 
+
 # ── draw and save ─────────────────────────────────────────────────────────────
+
+active = [label for label in LABELS if label in files]
+
+if len(active) == 0:
+    raise RuntimeError("No valid input files found. Check --inputdir, --prefix, and --suffix.")
 
 out = ROOT.TFile(args.output, "RECREATE")
 canvas = ROOT.TCanvas("c", "", 800, 600)
 canvas.Print(f"{args.pdf}[")
 
-active = [l for l in LABELS if l in files]
+kept = []
 
-kept = []  # keep normalised hists and legends alive for the duration of printing
-
-n1, l1 = draw_overlay(canvas,
-    [h_ncl[l] for l in active], active,
-    "N_{clusters} per event")
+n1, l1 = draw_overlay(
+    canvas,
+    [h_ncl[l] for l in active],
+    active,
+    "N_{clusters} per event",
+)
 kept += [n1, l1, draw_cms_label()]
 canvas.Update()
 canvas.Print(args.pdf)
 
-n2, l2 = draw_overlay(canvas,
-    [h_etot[l] for l in active], active,
-    "#SigmaE per event [GeV]")
+n2, l2 = draw_overlay(
+    canvas,
+    [h_etot[l] for l in active],
+    active,
+    "#SigmaE per event [GeV]",
+)
 kept += [n2, l2, draw_cms_label()]
 canvas.Update()
 canvas.Print(args.pdf)
 
-n3, l3 = draw_overlay(canvas,
-    [h_nhits[l] for l in active], active,
+n3, l3 = draw_overlay(
+    canvas,
+    [h_nhits[l] for l in active],
+    active,
     "N_{PF rechits} per cluster",
-    logy=True)
+    logy=True,
+)
 kept += [n3, l3, draw_cms_label()]
 canvas.Update()
 canvas.Print(args.pdf)
 
 canvas.Print(f"{args.pdf}]")
 
-# Write raw (unnormalised) histograms to ROOT file
+# Write raw, unnormalised histograms to ROOT file
 out.cd()
 for label in active:
     h_ncl[label].Write()
     h_etot[label].Write()
     h_nhits[label].Write()
+
 out.Close()
 
 print(f"Plots saved to {args.pdf}")

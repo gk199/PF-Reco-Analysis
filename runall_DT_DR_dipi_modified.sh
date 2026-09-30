@@ -5,7 +5,8 @@ R_HCAL=177.7
 TIMING_THRESHOLD=4.0
 
 # Etas to scan. Each eta gets its own GEN-SIM folder and its own re-RECO folder.
-ETA_LIST=(0.1 0.2 0.4)
+#ETA_LIST=(0.1 0.2 0.4)
+ETA_LIST=(0.8)
 
 # Base output locations; per-eta subfolders are derived from these.
 GENSIM_BASE="/eos/user/c/chtong/Public/Public_PFSimulations"
@@ -324,6 +325,6 @@ for PF in "${PF_VARIANTS[@]}"; do
   done
 done
 
-
+python3 Plotting/dipi_2dheatmap_9_22.py
 
 echo "Done."
