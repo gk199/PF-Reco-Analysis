@@ -1,30 +1,34 @@
 #!/usr/bin/env bash
 # Run after cmsenv in the CMSSW area that contains your PF modifications.
+# voms-proxy-init --voms cms --valid 96:00 
+# bash llp_condor/submit.sh
 set -euo pipefail
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 : "${CMSSW_BASE:?Run cmsenv in your existing CMSSW area first}"
 : "${CMSSW_VERSION:?Run cmsenv first}"
 : "${SCRAM_ARCH:?Run cmsenv first}"
 
-INPUT_LIST=${INPUT_LIST:-"$HERE/input_files.txt"}
-NFILES=${NFILES:-2}                 # 0 selects the whole input list
+INPUT_LIST=${INPUT_LIST:-"$HERE/input_files_MH125_MS50_CTau3000.txt"}
+#INPUT_LIST=${INPUT_LIST:-"$HERE/input_files_MH350_MS160_CTau10000.txt"}
+NFILES=${NFILES:-20}                 # 0 selects the whole input list
 FILE_OFFSET=${FILE_OFFSET:-0}      # Skip this many unique input entries first
 MAX_EVENTS=${MAX_EVENTS:--1}       # -1 processes the entire input file
 MERGE_OUTPUTS=${MERGE_OUTPUTS:-1}  # One final ntuple per PF algorithm
 SAVE_RECO=${SAVE_RECO:-1}          # Also save separate merged EDM files
 KEEP_PARTS=${KEEP_PARTS:-0}        # Keep per-input files after a successful merge
-TIMING_THRESHOLD=${TIMING_THRESHOLD:-4.0}
+TIMING_THRESHOLD=${TIMING_THRESHOLD:-2.0}
 NCPUS=${NCPUS:-4}
 MEMORY_MB=${MEMORY_MB:-12000}
 DISK_MB=${DISK_MB:-40000}
 JOB_FLAVOUR=${JOB_FLAVOUR:-tomorrow}
 CONDITIONS=${CONDITIONS:-auto:phase1_2023_realistic_postBPix}
 ERA=${ERA:-Run3_2023}
-EOS_BASE=${EOS_BASE:-/eos/user/c/chtong/Public/Rereco/LLP}
+EOS_BASE=${EOS_BASE:-/eos/user/c/chtong/Public/Rereco/LLP_MH125_MS50_CTau3000}
+#EOS_BASE=${EOS_BASE:-/eos/user/c/chtong/Public/Rereco/LLP_MH350_MS160_CTau10000}
 EOS_HOST=${EOS_HOST:-root://eosuser.cern.ch}
 SOURCE_HOST=${SOURCE_HOST:-root://cmseos.fnal.gov}
 RUN_ID=${RUN_ID:-"$(date -u +%Y%m%dT%H%M%SZ)_${RANDOM}"}
-BATCH_BASE=${BATCH_BASE:-"$(dirname "$CMSSW_BASE")/llp_condor_runs"}
+BATCH_BASE=${BATCH_BASE:-"$(dirname "$CMSSW_BASE")/src/PF-Reco-Analysis/llp_condor_runs"}
 PREPARE_ONLY=${PREPARE_ONLY:-0}
 
 die() { echo "ERROR: $*" >&2; exit 1; }
