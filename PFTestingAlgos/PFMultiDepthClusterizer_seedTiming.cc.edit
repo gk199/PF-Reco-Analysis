@@ -195,6 +195,19 @@ void PFMultiDepthClusterizer::buildClusters(const reco::PFClusterCollection& inp
         }
         decision.swap(next);
       }
+      // No holes: a kept depth cluster must be linked to the reference through kept
+      // clusters; one cut off by a deferred cluster is deferred with it.
+      std::vector<ClusterLink> keptLinks;
+      for (const auto& lnk : prunedLinks)
+        if (decision[lnk.from()] == kKeep && decision[lnk.to()] == kKeep)
+          keptLinks.push_back(lnk);
+      std::vector<bool> reached(input.size(), false);
+      reached[ref] = true;
+      std::vector<unsigned int> connected = {ref};
+      collectLinked(ref, reached, keptLinks, connected);
+      for (unsigned int g : group)
+        if (decision[g] == kKeep && !reached[g])
+          decision[g] = kDefer;
 
       reco::PFCluster cluster = input[ref];
       mask[ref] = true;

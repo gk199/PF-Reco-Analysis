@@ -5,8 +5,8 @@
 #   PFMultiDepthClusterizer_seedTiming.cc.edit  -> seed-to-seed timing at link stage
 #
 # A depth cluster is stacked only if its seed is within timeThreshold of the
-# leading HB depth seed of its linked group; out-of-time depth clusters are
-# stacked among themselves in later passes.  Depth clusters without a usable
+# leading HB depth seed of its linked group, and it is linked to that seed through
+# stacked clusters (no holes); the others are stacked among themselves in later passes.  Depth clusters without a usable
 # seed time (-999, or outside HB) follow the stack they are linked to.
 # Individual cells within an accepted depth cluster are all included regardless
 # of their timing.
