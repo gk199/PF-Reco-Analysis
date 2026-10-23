@@ -2,20 +2,20 @@
 # Label both PF versions and make the comparison PDF for each sample and timing setting.
 set -e
 
-BASE=/eos/user/c/chtong/Public/Rereco
-SAMPLES="LLP_MH350_MS160_CTau10000 LLP_MH125_MS50_CTau3000"
-TIMINGS="2 4"
+BASE=/eos/user/c/chtong/Public/Rereco/LLP_Oct_22
+SAMPLES="LLP_MH350_MS160_CTau10000 " #"LLP_MH350_MS160_CTau10000 LLP_MH125_MS50_CTau3000"
+TIMINGS="2 " #"2 4"
 
 for sample in $SAMPLES; do
     for ns in $TIMINGS; do
         dir=$BASE/$sample/${ns}ns_N2000
-        # echo "===== $sample, ${ns} ns ====="
+        echo "===== $sample, ${ns} ns ====="
 
-        # for pf in standardPF seedTimingPF; do
-        #     python3 label_llp_clusters.py \
-        #         --input  $dir/pfObjectsNtuple_${pf}.root \
-        #         --output $dir/labels_${pf}.root
-        # done
+        for pf in standardPF seedTimingPF; do
+            python3 label_llp_clusters.py \
+                --input  $dir/pfObjectsNtuple_${pf}.root \
+                --output $dir/labels_${pf}.root
+        done
 
         python3 compare_timing_vs_standard.py \
             --standard $dir/labels_standardPF.root \

@@ -244,6 +244,163 @@ for n, c in enumerate(hb_clus):
     page(canvas, draw_time2d)
     canvas.SetRightMargin(0.1)
 
+# ----- Cluster time vs expected delay, one horizontal violin per PF version overlaid -----
+# All valid-time matched clusters. A: 68% width, B: MAD width, C: RMS width
+VIOLIN_ALPHA = 0.08   # fill transparency: 0 = outline only, 1 = solid
+VIOLIN_BW = 1.      # [ns] width of the Gaussian window sliding along delta t
+VIOLIN_NMIN = 1.     # minimum effective number of clusters in the window to draw the envelope
+
+def wquantile(v, w, q):
+    o = np.argsort(v)
+    cdf = np.cumsum(w[o])
+    return np.interp(q, cdf / cdf[-1], v[o])
+
+def sliding_band(delay, res, grid, bw, width, n_min=VIOLIN_NMIN):
+    """Local center and half-width of res in a Gaussian window around each grid point in delay.
+    width = "q68": median, (q84 - q16)/2;  "mad": median, 1.4826 * median|res - median|;  "rms": mean, RMS."""
+    med, half = np.full(len(grid), np.nan), np.full(len(grid), np.nan)
+    for i, x in enumerate(grid):
+        w = np.exp(-0.5 * ((delay - x) / bw) ** 2)
+        w[np.abs(delay - x) > 12.] = 0.  # finite window: no extrapolation from far-away clusters
+        if w.sum() <= 0 or w.sum() ** 2 / (w ** 2).sum() < n_min: continue  # too few clusters in the window
+        med[i] = wquantile(res, w, 0.5)
+        if width == "q68":
+            q16, q84 = wquantile(res, w, [0.16, 0.84])
+            half[i] = 0.5 * (q84 - q16)
+        elif width == "rms":
+            med[i] = np.average(res, weights=w)  # RMS is taken around the weighted mean, not the median
+            half[i] = np.sqrt(np.average((res - med[i]) ** 2, weights=w))
+        else:
+            half[i] = 1.4826 * wquantile(np.abs(res - med[i]), w, 0.5)
+    return med, half
+
+def inputs_clusters():
+    """All valid-time matched clusters of each version (same selection as the 2D time vs delay pages)."""
+    out = []
+    for c in hb_clus:
+        m = c[(c.iGen >= 0) & (c.time > -100)]
+        out.append((ak.to_numpy(m.expDelay).astype(np.float64), ak.to_numpy(m.time).astype(np.float64)))
+    return out
+
+def time_violin(name, inputs, width, ytitle, note):
+    def draw():
+        grid = np.linspace(DELAY_BINS[0], DELAY_BINS[-1], 301)
+        shapes = [(delay, t - delay, *sliding_band(delay, t - delay, grid, VIOLIN_BW, width)) for delay, t in inputs()]
+        lo = min(np.nanmin(m - h) for _, _, m, h in shapes)
+        hi = max(np.nanmax(m + h) for _, _, m, h in shapes)
+        pad = 0.3 * (hi - lo)
+        frame = canvas.DrawFrame(DELAY_BINS[0], lo - pad, DELAY_BINS[-1], hi + pad, f";LLP #Deltat [ns];{ytitle} - #Deltat [ns]")
+        frame.SetName(f"frame_{name}")
+        keep, bodies = [frame], []
+        for n, (delay, res, med, half) in enumerate(shapes):
+            ok = ~np.isnan(half)
+            x, m, h = grid[ok], med[ok], half[ok]
+            body = ROOT.TGraph(2 * len(x), np.concatenate([x, x[::-1]]), np.concatenate([m + h, (m - h)[::-1]]))
+            body.SetFillColorAlpha(COLORS[n], VIOLIN_ALPHA)
+            body.SetLineColor(COLORS[n])
+            body.SetLineWidth(2)
+            body.Draw("lf")
+            center = ROOT.TGraph(len(x), x, m)  # local median (mean for RMS)
+            center.SetLineColor(COLORS[n])
+            center.SetLineStyle(2)
+            center.Draw("l")
+            bodies.append(body)
+            keep.append(center)
+        leg = ROOT.TLegend(0.16, 0.76, 0.5, 0.88)
+        leg.SetBorderSize(0)
+        leg.SetFillStyle(0)
+        leg.SetTextSize(0.036)
+        for b, lbl, (delay, _, _, _) in zip(bodies, LABELS, shapes):
+            leg.AddEntry(b, f"{lbl} (N = {len(delay)})", "f")
+        leg.Draw()
+        band = {"q68": "median #pm (q_{84} - q_{16})/2",
+                "mad": "median #pm 1.4826#timesMAD",
+                "rms": "mean #pm RMS"}[width]
+        text = ROOT.TLatex()
+        text.SetNDC()
+        text.SetTextSize(0.028)
+        text.DrawLatex(0.16, 0.20, note)
+        text.DrawLatex(0.16, 0.16, f"band: {band}, {VIOLIN_BW:g} ns window")
+        return keep + bodies + [leg, text, match_text()]
+    page(canvas, draw)
+
+time_violin("A", inputs_clusters, "q68", "cluster time",
+            "A: all valid-time matched clusters, 68% width")
+time_violin("B", inputs_clusters, "mad", "cluster time",
+            "B: all valid-time matched clusters, core width (MAD)")
+time_violin("C", inputs_clusters, "rms", "cluster time",
+            "C: all valid-time matched clusters, RMS width")
+
+# ----- Matched cluster time vs expected delay: seaborn-style violins, both PF versions -----
+def violin_shape(vals, lo=-15., hi=25., ngrid=400):
+    """Binned Gaussian KDE (Scott bandwidth, as seaborn), cut 2 bandwidths beyond the data."""
+    bw = max(np.std(vals) * len(vals) ** (-0.2), 0.05)
+    edges = np.linspace(lo, hi, ngrid + 1)
+    step = edges[1] - edges[0]
+    counts, _ = np.histogram(vals, edges)
+    half = min(int(4 * bw / step) + 1, ngrid)
+    kern = np.exp(-0.5 * (np.arange(-half, half + 1) * step / bw) ** 2)
+    dens = np.convolve(counts, kern, mode="full")[half:half + ngrid].astype(np.float64)
+    y = 0.5 * (edges[:-1] + edges[1:])
+    keep = (y >= vals.min() - 2 * bw) & (y <= vals.max() + 2 * bw)
+    return y[keep], dens[keep]
+
+def draw_time_violin():
+    nb = len(DELAY_BINS) - 1
+    frame = ROOT.TH1F("h_tviolin_frame", ";LLP #Deltat [ns];cluster time [ns]", nb, 0, nb)
+    for i in range(nb):
+        frame.GetXaxis().SetBinLabel(i + 1, f"{DELAY_BINS[i]:g}-{DELAY_BINS[i + 1]:g}")
+    frame.SetMinimum(-15)
+    frame.SetMaximum(25)
+    frame.Draw("axis")
+    keep, proxies = [frame], []
+    for n, c in enumerate(hb_clus):
+        m = c[(c.iGen >= 0) & (c.time > -100)]  # same selection as the 2D time vs delay pages
+        delay = ak.to_numpy(m.expDelay).astype(np.float64)
+        time = ak.to_numpy(m.time).astype(np.float64)
+        idx = np.digitize(delay, DELAY_BINS) - 1
+        proxy = ROOT.TGraph()
+        proxy.SetFillColorAlpha(COLORS[n], 0.6)
+        proxy.SetLineColor(COLORS[n])
+        proxies.append(proxy)
+        for i in range(nb):
+            vals = time[idx == i]
+            if len(vals) < 2: continue
+            xc = i + 0.5 + (-0.2 if n == 0 else 0.2)
+            y, dens = violin_shape(vals)
+            w = 0.18 * dens / dens.max()
+            xs = np.concatenate([xc - w, (xc + w)[::-1]])
+            ys = np.concatenate([y, y[::-1]])
+            body = ROOT.TGraph(len(xs), xs, ys)
+            body.SetFillColorAlpha(COLORS[n], 0.6)
+            body.SetLineColor(COLORS[n])
+            body.Draw("lf")
+            q1, med, q3 = np.percentile(vals, [25, 50, 75])
+            iqr = q3 - q1
+            wlo = vals[vals >= q1 - 1.5 * iqr].min()
+            whi = vals[vals <= q3 + 1.5 * iqr].max()
+            whisker = ROOT.TLine(xc, wlo, xc, whi)
+            whisker.SetLineColor(ROOT.kGray + 3)
+            whisker.Draw()
+            box = ROOT.TLine(xc, q1, xc, q3)
+            box.SetLineColor(ROOT.kGray + 3)
+            box.SetLineWidth(5)
+            box.Draw()
+            dot = ROOT.TMarker(xc, med, 20)
+            dot.SetMarkerColor(ROOT.kWhite)
+            dot.SetMarkerSize(0.6)
+            dot.Draw()
+            keep += [body, whisker, box, dot]
+    leg = ROOT.TLegend(0.16, 0.78, 0.5, 0.88)
+    leg.SetBorderSize(0)
+    leg.SetFillStyle(0)
+    leg.SetTextSize(0.036)
+    for p, lbl in zip(proxies, LABELS):
+        leg.AddEntry(p, lbl, "f")
+    leg.Draw()
+    return keep + proxies + [leg, match_text()]
+page(canvas, draw_time_violin)
+
 # ----- Cluster multiplicity per event -----
 def draw_multiplicity():
     hs = []

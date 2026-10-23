@@ -118,9 +118,9 @@ def parse_args():
         description="Loop over one-pion PF-cluster ntuples and make clean eta/energy heatmaps + overlay grids."
     )
 
-    parser.add_argument("--input-dir", "--inputdir", dest="input_dir", default="/eos/user/c/chtong/Public/Rereco/SinglePion_SmallEta_modified_5ns/",
+    parser.add_argument("--input-dir", "--inputdir", dest="input_dir", default="/eos/user/c/chtong/Public/Rereco/SinglePion_SmallEta_modified_4ns_October_22nd/",
                         help="Directory containing the ntuple ROOT files.")
-    parser.add_argument("--output-dir", "--outputdir", dest="output_dir", default="/eos/user/c/chtong/Public/Rereco/SinglePion_SmallEta_modified_5ns/",
+    parser.add_argument("--output-dir", "--outputdir", dest="output_dir", default="/eos/user/c/chtong/Public/Rereco/SinglePion_SmallEta_modified_4ns_October_22nd/",
                         help="Directory where the output PDF and ROOT file will be saved.")
     parser.add_argument("--prefix", default="pfObjectsNtuple_",
                         help="Filename prefix before the PF algorithm name.")

@@ -61,7 +61,7 @@ cd ..
 cmsenv
 
 GENSIM_DIR="/eos/user/c/chtong/Public/Public_PFSimulations/SinglePion_SmallEta_modified"
-OUT_DIR="/eos/user/c/chtong/Public/Rereco/SinglePion_SmallEta_modified_5ns"
+OUT_DIR="/eos/user/c/chtong/Public/Rereco/SinglePion_SmallEta_modified_4ns_October_22nd"
 
 mkdir -p "${GENSIM_DIR}"
 mkdir -p "${OUT_DIR}"
@@ -203,9 +203,9 @@ echo "All GEN-SIM and GEN-SIM-RAW files are done."
 
 
 cd PF-Reco-Analysis
-./SetTimingThreshold.sh 5.0
+./SetTimingThreshold.sh 4.0
 echo "========================================"
-echo "  Timing threshold: 5 ns"
+echo "  Timing threshold: 4 ns"
 echo "========================================"
 cd ..
 

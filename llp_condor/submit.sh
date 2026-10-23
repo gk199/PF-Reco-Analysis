@@ -8,8 +8,8 @@ HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 : "${CMSSW_VERSION:?Run cmsenv first}"
 : "${SCRAM_ARCH:?Run cmsenv first}"
 
-INPUT_LIST=${INPUT_LIST:-"$HERE/input_files_MH125_MS50_CTau3000.txt"}
-#INPUT_LIST=${INPUT_LIST:-"$HERE/input_files_MH350_MS160_CTau10000.txt"}
+#INPUT_LIST=${INPUT_LIST:-"$HERE/input_files_MH125_MS50_CTau3000.txt"}
+INPUT_LIST=${INPUT_LIST:-"$HERE/input_files_MH350_MS160_CTau10000.txt"}
 NFILES=${NFILES:-20}                 # 0 selects the whole input list
 FILE_OFFSET=${FILE_OFFSET:-0}      # Skip this many unique input entries first
 MAX_EVENTS=${MAX_EVENTS:--1}       # -1 processes the entire input file
@@ -23,8 +23,8 @@ DISK_MB=${DISK_MB:-40000}
 JOB_FLAVOUR=${JOB_FLAVOUR:-tomorrow}
 CONDITIONS=${CONDITIONS:-auto:phase1_2023_realistic_postBPix}
 ERA=${ERA:-Run3_2023}
-EOS_BASE=${EOS_BASE:-/eos/user/c/chtong/Public/Rereco/LLP_MH125_MS50_CTau3000}
-#EOS_BASE=${EOS_BASE:-/eos/user/c/chtong/Public/Rereco/LLP_MH350_MS160_CTau10000}
+#EOS_BASE=${EOS_BASE:-/eos/user/c/chtong/Public/Rereco/LLP_MH125_MS50_CTau3000}
+EOS_BASE=${EOS_BASE:-/eos/user/c/chtong/Public/Rereco/LLP_Oct_22/LLP_MH350_MS160_CTau10000}
 EOS_HOST=${EOS_HOST:-root://eosuser.cern.ch}
 SOURCE_HOST=${SOURCE_HOST:-root://cmseos.fnal.gov}
 RUN_ID=${RUN_ID:-"$(date -u +%Y%m%dT%H%M%SZ)_${RANDOM}"}

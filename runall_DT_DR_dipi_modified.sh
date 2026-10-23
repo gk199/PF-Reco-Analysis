@@ -5,12 +5,11 @@ R_HCAL=177.7
 TIMING_THRESHOLD=4.0
 
 # Etas to scan. Each eta gets its own GEN-SIM folder and its own re-RECO folder.
-#ETA_LIST=(0.1 0.2 0.4)
-ETA_LIST=(0.8)
+ETA_LIST=(0.2 0.4 0.8)
 
 # Base output locations; per-eta subfolders are derived from these.
 GENSIM_BASE="/eos/user/c/chtong/Public/Public_PFSimulations"
-RECO_BASE="/eos/user/c/chtong/Public/Rereco"
+RECO_BASE="/eos/user/c/chtong/Public/Rereco/Dipions_Oct_22/"
 RECO_SUFFIX="_${TIMING_THRESHOLD%.0}ns"   # 4.0 -> "_4ns", 2.5 -> "_2.5ns"
 
 gensim_dir() { echo "${GENSIM_BASE}/Dipion_eta${1}"; }
@@ -125,34 +124,34 @@ for ETA in "${ETA_LIST[@]}"; do
     # OffsetFirst setup
     OFFSET_CMD="process.generator.PGunParameters.OffsetFirst=cms.double(${oF})"
 
-    cmsDriver.py Configuration/Generator/python/DipionGun_Eta_cfi.py \
-      --mc \
-      --step GEN,SIM \
-      --era Run3_2024 \
-      --geometry DB:Extended \
-      --conditions auto:phase1_2024_realistic \
-      --beamspot Realistic25ns13p6TeVEarly2022Collision \
-      --eventcontent RAWSIM \
-      --datatier GEN-SIM \
-      --customise_commands "${TIMING_CMD};${Z_CMD};${ETA_CMD};${PT_CMD};${DELTA_CMD};${OFFSET_CMD}" \
-      --fileout "file:${GENSIM_DIR}/${SAMPLE}_GEN-SIM.root" \
-      --python_filename "${SAMPLE}_cfg.py" \
-      -n ${NEVENTS}
+    # cmsDriver.py Configuration/Generator/python/DipionGun_Eta_cfi.py \
+    #   --mc \
+    #   --step GEN,SIM \
+    #   --era Run3_2024 \
+    #   --geometry DB:Extended \
+    #   --conditions auto:phase1_2024_realistic \
+    #   --beamspot Realistic25ns13p6TeVEarly2022Collision \
+    #   --eventcontent RAWSIM \
+    #   --datatier GEN-SIM \
+    #   --customise_commands "${TIMING_CMD};${Z_CMD};${ETA_CMD};${PT_CMD};${DELTA_CMD};${OFFSET_CMD}" \
+    #   --fileout "file:${GENSIM_DIR}/${SAMPLE}_GEN-SIM.root" \
+    #   --python_filename "${SAMPLE}_cfg.py" \
+    #   -n ${NEVENTS}
 
-    cmsDriver.py step1 \
-      --python_filename "${SAMPLE}_step1_cfg.py" \
-      --filein "file:${GENSIM_DIR}/${SAMPLE}_GEN-SIM.root" \
-      --fileout "file:${GENSIM_DIR}/${SAMPLE}_step1_GEN-SIM-RAW.root" \
-      --pileup NoPileUp \
-      --customise Configuration/DataProcessing/Utils.addMonitoring \
-      --eventcontent RAWSIM \
-      --datatier GEN-SIM-RAW \
-      --conditions auto:phase1_2024_realistic \
-      --step DIGI,L1,DIGI2RAW \
-      --geometry DB:Extended \
-      --era Run3_2024 \
-      --mc \
-      -n ${NEVENTS}
+    # cmsDriver.py step1 \
+    #   --python_filename "${SAMPLE}_step1_cfg.py" \
+    #   --filein "file:${GENSIM_DIR}/${SAMPLE}_GEN-SIM.root" \
+    #   --fileout "file:${GENSIM_DIR}/${SAMPLE}_step1_GEN-SIM-RAW.root" \
+    #   --pileup NoPileUp \
+    #   --customise Configuration/DataProcessing/Utils.addMonitoring \
+    #   --eventcontent RAWSIM \
+    #   --datatier GEN-SIM-RAW \
+    #   --conditions auto:phase1_2024_realistic \
+    #   --step DIGI,L1,DIGI2RAW \
+    #   --geometry DB:Extended \
+    #   --era Run3_2024 \
+    #   --mc \
+    #   -n ${NEVENTS}
 
   done
 done
